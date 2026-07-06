@@ -89,3 +89,48 @@ class Purchase(models.Model):
             if vals.get('x_noted_by') and not rec.x_noted_by_date:
                 vals['x_noted_by_date'] = date.today()
         return super().write(vals)
+
+
+
+class PurchaseOrderLine(models.Model):
+    _inherit = 'purchase.order.line'
+
+    withholding_tax_ids = fields.Many2many(
+        'account.tax',
+        'purchase_order_line_withholding_tax_rel',
+        'order_line_id',
+        'tax_id',
+        string='Withholding Tax',
+        domain=[('type_tax_use', '=', 'purchase')],
+        context={'default_type_tax_use': 'purchase', 'search_view_ref': 'account.account_tax_view_search'},
+    )
+
+    def _is_withholding_tax(self, tax):
+        """Placeholder criterion — amount < 0.
+        TODO: replace with finalized identification logic (tax group / flag)."""
+        return tax.amount < 0
+
+    @api.onchange('withholding_tax_ids')
+    def _onchange_withholding_tax_ids(self):
+        for line in self:
+            non_wht_taxes = line.taxes_id.filtered(lambda t: not line._is_withholding_tax(t))
+            line.taxes_id = non_wht_taxes + line.withholding_tax_ids
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        lines = super().create(vals_list)
+        lines._sync_withholding_into_taxes()
+        return lines
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'withholding_tax_ids' in vals:
+            self._sync_withholding_into_taxes()
+        return res
+
+    def _sync_withholding_into_taxes(self):
+        for line in self:
+            non_wht_taxes = line.taxes_id.filtered(lambda t: not line._is_withholding_tax(t))
+            new_taxes = non_wht_taxes + line.withholding_tax_ids
+            if new_taxes != line.taxes_id:
+                line.taxes_id = new_taxes
