@@ -177,6 +177,7 @@ class BIR1604E(models.Model):
     def _generate_schedule1(self):
         """Generate Schedule 1 from monthly/quarterly tax remittances"""
         Schedule1 = self.env['bir.1604e.schedule1']
+        months_data = {}
         
         # Try to get data from BIR 1601-EQ forms if module is installed
         if 'bir.1601eq' in self.env:
@@ -186,18 +187,15 @@ class BIR1604E(models.Model):
                 ('state', '=', 'submitted')
             ])
             
-            # Group by quarter and aggregate monthly data
-            months_data = {}
+            quarter_map = {
+                '1': [(1, 'JAN'), (2, 'FEB'), (3, 'MAR')],
+                '2': [(4, 'APR'), (5, 'MAY'), (6, 'JUN')],
+                '3': [(7, 'JUL'), (8, 'AUG'), (9, 'SEPT')],
+                '4': [(10, 'OCT'), (11, 'NOV'), (12, 'DEC')]
+            }
+            
             for form in forms_1601eq:
-                quarter_map = {
-                    '1': [(1, 'JAN'), (2, 'FEB'), (3, 'MAR')],
-                    '2': [(4, 'APR'), (5, 'MAY'), (6, 'JUN')],
-                    '3': [(7, 'JUL'), (8, 'AUG'), (9, 'SEPT')],
-                    '4': [(10, 'OCT'), (11, 'NOV'), (12, 'DEC')]
-                }
-                
                 if form.quarter in quarter_map:
-                    # Distribute quarterly amount across months (simplified)
                     monthly_amount = form.tax_withheld_current_month / 3
                     for month_num, month_name in quarter_map[form.quarter]:
                         months_data[month_num] = {
@@ -206,9 +204,8 @@ class BIR1604E(models.Model):
                             'penalties': form.penalties / 3 if form.penalties else 0.0
                         }
         else:
-            # If no 1601-EQ module, create empty monthly entries
-            month_names = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 
-                          'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC']
+            month_names = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+                           'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC']
             for idx, month in enumerate(month_names, 1):
                 months_data[idx] = {
                     'month': month,
@@ -216,7 +213,6 @@ class BIR1604E(models.Model):
                     'penalties': 0.0
                 }
         
-        # Create Schedule 1 lines
         for month_num in sorted(months_data.keys()):
             data = months_data[month_num]
             Schedule1.create({
@@ -231,9 +227,8 @@ class BIR1604E(models.Model):
         """Generate Schedule 2 from Form 1606 data"""
         Schedule2 = self.env['bir.1604e.schedule2']
         
-        # Create monthly entries (can be populated from actual 1606 data if available)
-        month_names = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 
-                      'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC']
+        month_names = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+                       'JUL', 'AUG', 'SEPT', 'OCT', 'NOV', 'DEC']
         
         for idx, month in enumerate(month_names, 1):
             Schedule2.create({
@@ -247,102 +242,110 @@ class BIR1604E(models.Model):
     def _generate_schedule3(self):
         """Generate Schedule 3: Payees exempt from withholding tax"""
         Schedule3 = self.env['bir.1604e.schedule3']
-        
-        # Query vendor bills that are exempt from withholding
-        AccountMove = self.env['account.move']
-        bills = AccountMove.search([
+
+        bills = self.env['account.move'].search([
             ('move_type', '=', 'in_invoice'),
             ('date', '>=', self.date_from),
             ('date', '<=', self.date_to),
             ('state', '=', 'posted'),
             ('company_id', '=', self.company_id.id),
         ])
-        
-        # Group by partner
+
         partner_data = {}
         for bill in bills:
             partner = bill.partner_id
+
+            # Pick the first zero-rate purchase tax on the bill lines as the ATC reference
+            atc_tax = False
+            for line in bill.invoice_line_ids:
+                exempt_tax = line.tax_ids.filtered(
+                    lambda t: t.type_tax_use == 'purchase' and t.amount == 0
+                )
+                if exempt_tax:
+                    atc_tax = exempt_tax[0]
+                    break
+
             if partner.id not in partner_data:
                 partner_data[partner.id] = {
-                    'partner_id': partner.id,
                     'tin': partner.vat or '',
                     'name': partner.name,
-                    'amount': 0.0
+                    'amount': 0.0,
+                    'atc_id': atc_tax.id if atc_tax else False,
                 }
             partner_data[partner.id]['amount'] += bill.amount_total
-        
-        # Create Schedule 3 lines (limit to sample for demonstration)
+
         seq = 1
-        for partner_id, data in list(partner_data.items())[:100]:  # Limit for demo
+        for partner_id, data in list(partner_data.items())[:100]:
             Schedule3.create({
                 'form_id': self.id,
                 'sequence': seq,
                 'tin': data['tin'],
                 'payee_name': data['name'],
-                'atc_code': 'WI010',  # Default ATC, should be configurable
+                'atc_id': data['atc_id'],
                 'nature_income': 'Professional Fees',
                 'income_payment': data['amount'],
             })
             seq += 1
-    
+
     def _generate_schedule4(self):
         """Generate Schedule 4: Payees subject to expanded withholding tax"""
         Schedule4 = self.env['bir.1604e.schedule4']
-        
-        # Query vendor bills with withholding tax
-        AccountMove = self.env['account.move']
-        bills = AccountMove.search([
+
+        bills = self.env['account.move'].search([
             ('move_type', '=', 'in_invoice'),
             ('date', '>=', self.date_from),
             ('date', '<=', self.date_to),
             ('state', '=', 'posted'),
             ('company_id', '=', self.company_id.id),
         ])
-        
-        # Group by partner
+
         partner_data = {}
         for bill in bills:
             partner = bill.partner_id
-            
-            # Look for withholding tax in bill lines
             wht_amount = 0.0
             base_amount = bill.amount_untaxed
-            
-            # Try to find withholding tax lines
+            atc_tax = False
+
+            for line in bill.invoice_line_ids:
+                ewt_tax = line.tax_ids.filtered(
+                    lambda t: t.type_tax_use == 'purchase' and t.amount != 0
+                )
+                if ewt_tax:
+                    atc_tax = ewt_tax[0]
+
             for line in bill.line_ids:
                 if 'withholding' in (line.name or '').lower() or 'ewt' in (line.name or '').lower():
                     wht_amount += abs(line.balance)
-            
+
             if partner.id not in partner_data:
                 partner_data[partner.id] = {
-                    'partner_id': partner.id,
                     'tin': partner.vat or '',
                     'name': partner.name,
                     'amount': 0.0,
-                    'wht': 0.0
+                    'wht': 0.0,
+                    'atc_id': atc_tax.id if atc_tax else False,
+                    'tax_rate': atc_tax.amount if atc_tax else 0.0,
                 }
             partner_data[partner.id]['amount'] += base_amount
             partner_data[partner.id]['wht'] += wht_amount
-        
-        # Create Schedule 4 lines
+
         seq = 1
-        for partner_id, data in list(partner_data.items())[:100]:  # Limit for demo
-            tax_rate = (data['wht'] / data['amount'] * 100) if data['amount'] > 0 else 0.0
-            
+        for partner_id, data in list(partner_data.items())[:100]:
             Schedule4.create({
                 'form_id': self.id,
                 'sequence': seq,
                 'tin': data['tin'],
                 'payee_name': data['name'],
-                'atc_code': 'WC010',  # Default ATC
+                'atc_id': data['atc_id'],
                 'nature_income': 'Professional Fees',
                 'income_payment': data['amount'],
-                'tax_rate': tax_rate,
+                'tax_rate': data['tax_rate'],
             })
             seq += 1
-     ####################
-     # Generate pdf start
-     ###################
+
+    ####################
+    # Generate pdf start
+    ###################
     def _fmt_date(self, d):
         """Format a date value as MM/DD/YYYY for BIR forms."""
         if not d:
@@ -354,29 +357,22 @@ class BIR1604E(models.Model):
             except ValueError:
                 return d
         return d.strftime('%m/%d/%Y')
- 
+
     def _fmt_amt(self, value):
         """Format a float as a comma-separated number string."""
         if not value:
             return ''
         return f'{value:,.2f}'
- 
+
     def _build_pdf_field_map(self):
-       
+
         self.ensure_one()
         c = self.company_id
         tin_clean = (c.vat or '').replace('-', '').replace(' ', '')
- 
-        # ── Helpers ───────────────────────────────────────────────────────
-        # Your schedule1 lines use a month Selection field (JAN/FEB/…/DEC).
-        # The BIR form uses QUARTERLY rows in Schedule 1, so we aggregate.
-        # (If you actually store quarterly data, adjust _aggregate_quarterly below.)
+
         q_data = self._aggregate_quarterly_s1()
- 
-        # Your schedule2 lines are monthly — key them by the month code
         monthly = {line.month: line for line in self.schedule2_line_ids}
- 
-        # ── Build map ─────────────────────────────────────────────────────
+
         field_map = {
             # Part I
             'Text9':    str(self.year),
@@ -391,7 +387,7 @@ class BIR1604E(models.Model):
             'Text7':    c.zip or '',
             'Text6':    c.phone or '',
             'Text8':    c.email or '',
- 
+
             # Schedule 1 – Quarterly
             # Q1
             'Text10': self._fmt_date(q_data['Q1']['date']),
@@ -425,17 +421,16 @@ class BIR1604E(models.Model):
             'Text37': self._fmt_amt(self.total_1601e_taxes),
             'Text38': self._fmt_amt(self.total_1601e_penalties),
             'Text18': self._fmt_amt(self.total_1601e_remitted),
- 
+
             # Signature
             'Text23': f'{self.signatory_name or ""} / {self.signatory_title or ""}',
             'Text24': f'{self.signatory_name or ""} / {self.signatory_title or ""}',
-            'Text25': '',   # Tax agent accreditation — add a field if needed
-            'Text26': '',   # Date of issue
-            'Text27': '',   # Date of expiry
+            'Text25': '',
+            'Text26': '',
+            'Text27': '',
         }
- 
-        # ── Schedule 2 – Monthly ──────────────────────────────────────────
-        # Maps your month Selection codes to the correct PDF field groups
+
+        # Schedule 2 – Monthly
         MONTHLY_PDF_FIELDS = {
             'JAN':  ('Text22', 'Text82',  'Text69', 'Text57',  'Text95',  'Text108'),
             'FEB':  ('Text46', 'Text58',  'Text70', 'Text83',  'Text96',  'Text109'),
@@ -450,7 +445,7 @@ class BIR1604E(models.Model):
             'NOV':  ('Text55', 'Text67',  'Text79', 'Text92',  'Text105', 'Text118'),
             'DEC':  ('Text56', 'Text68',  'Text80', 'Text93',  'Text106', 'Text119'),
         }
- 
+
         total_m_tax = 0.0
         total_m_pen = 0.0
         for month_code, keys in MONTHLY_PDF_FIELDS.items():
@@ -461,21 +456,19 @@ class BIR1604E(models.Model):
                 total_m_pen += line.penalties
                 field_map[date_k]  = self._fmt_date(line.date_remittance)
                 field_map[bank_k]  = line.bank_name or ''
-                field_map[tra_k]   = ''   # Add tra_number field to schedule2 if needed
+                field_map[tra_k]   = ''
                 field_map[tax_k]   = self._fmt_amt(line.taxes_withheld)
                 field_map[pen_k]   = self._fmt_amt(line.penalties)
                 field_map[total_k] = self._fmt_amt(line.total_remitted)
             else:
                 for k in keys:
                     field_map[k] = ''
- 
+
         field_map['Text94']  = self._fmt_amt(total_m_tax)
         field_map['Text107'] = self._fmt_amt(total_m_pen)
         field_map['Text120'] = self._fmt_amt(total_m_tax + total_m_pen)
- 
-        # ── Page 2, Schedule 3 = your schedule4_line_ids (EWT Alphalist) ──
-        # The PDF template only has 4 visible rows.
-        # Full list must be e-submitted separately per BIR rules.
+
+        # Page 2, Schedule 3 = schedule4_line_ids (EWT Alphalist)
         EWT_PDF_ROWS = [
             ('Text28',  'Text123', 'Text126', 'Text129', 'Text132', 'Text136', 'Text139'),
             ('Text121', 'Text124', 'Text127', 'Text130', 'Text133', 'Text137', 'Text140'),
@@ -499,8 +492,8 @@ class BIR1604E(models.Model):
                 for k in row_keys:
                     if k:
                         field_map[k] = ''
- 
-        # ── Page 2, Schedule 4 = your schedule3_line_ids (Exempt Alphalist) ─
+
+        # Page 2, Schedule 4 = schedule3_line_ids (Exempt Alphalist)
         EXEMPT_PDF_ROWS = [
             ('Text29',  'Text146', 'Text150', 'Text154', 'Text158', 'Text162'),
             ('Text143', 'Text147', 'Text151', 'Text155', 'Text159', 'Text164'),
@@ -521,11 +514,11 @@ class BIR1604E(models.Model):
             else:
                 for k in row_keys:
                     field_map[k] = ''
- 
+
         return field_map
- 
+
     def _aggregate_quarterly_s1(self):
-     
+
         QUARTER_MAP = {
             'Q1': ['JAN', 'FEB', 'MAR'],
             'Q2': ['APR', 'MAY', 'JUN'],
@@ -534,19 +527,17 @@ class BIR1604E(models.Model):
         }
         result = {}
         month_lookup = {line.month: line for line in self.schedule1_line_ids}
- 
+
         for quarter, months in QUARTER_MAP.items():
             lines = [month_lookup[m] for m in months if m in month_lookup]
             if lines:
-                # Use the last month's remittance date and bank as the quarter's value;
-                # sum taxes and penalties across the 3 months.
                 last = lines[-1]
                 tax  = sum(l.taxes_withheld for l in lines)
                 pen  = sum(l.penalties for l in lines)
                 result[quarter] = {
                     'date':  last.date_remittance,
                     'bank':  last.bank_name or '',
-                    'tra':   '',   # Add a TRA field to schedule1 if needed
+                    'tra':   '',
                     'tax':   tax,
                     'pen':   pen,
                     'total': tax + pen,
@@ -563,9 +554,8 @@ class BIR1604E(models.Model):
         from pypdf import PdfReader, PdfWriter
         from pypdf.generic import NameObject, DictionaryObject, NumberObject, create_string_object
 
-        # Locate the template — stored in the module's static/pdf folder
         module_path = os.path.dirname(os.path.abspath(__file__))
-        template_path = os.path.join(module_path, '..', 'static', 'src','pdf', '1604E.pdf')
+        template_path = os.path.join(module_path, '..', 'static', 'src', 'pdf', '1604E.pdf')
         template_path = os.path.normpath(template_path)
 
         if not os.path.exists(template_path):
@@ -575,25 +565,22 @@ class BIR1604E(models.Model):
                 '  %s'
             ) % template_path)
 
-        # Build the field → value mapping from your model data
         field_map = self._build_pdf_field_map()
 
-        # Fill the PDF
         reader = PdfReader(template_path)
         writer = PdfWriter()
         writer.append(reader)
 
-        # Apply letter spacing per field via /DA (Tc = character spacing)
         SPACED_FIELDS = {
-            'Text4':   ('14 Tc',  9.2),  # TIN
-            'Text9':   ('14 Tc',  9.2),  # Year
-            'Text166': ('4 Tc',  9.2),  # Sheets attached
-            'Text167': ('4 Tc',  9.2),  # RDO Code
-            'Text1':   ('6 Tc',  9.2),  # Withholding agent name
-            'Text2':   ('6 Tc',  9.2),  # Address line 1
-            'Text3':   ('6 Tc',  9.2),  # Address line 2
-            'Text6':   ('6 Tc',  9.2),  # Contact number
-            'Text8':   ('6 Tc',  9.2),  # Email address
+            'Text4':   ('14 Tc',  9.2),
+            'Text9':   ('14 Tc',  9.2),
+            'Text166': ('4 Tc',   9.2),
+            'Text167': ('4 Tc',   9.2),
+            'Text1':   ('6 Tc',   9.2),
+            'Text2':   ('6 Tc',   9.2),
+            'Text3':   ('6 Tc',   9.2),
+            'Text6':   ('6 Tc',   9.2),
+            'Text8':   ('6 Tc',   9.2),
         }
 
         for page in writer.pages:
@@ -607,17 +594,14 @@ class BIR1604E(models.Model):
                             new_da = f'.2666667 .2666667 .2666667 rg\n{tc}\n/F0 {fs} Tf\n'
                             obj[NameObject('/DA')] = create_string_object(new_da)
 
-        # Remove text field borders and make backgrounds transparent
         for page in writer.pages:
             if '/Annots' in page:
                 for annot in page['/Annots']:
                     obj = annot.get_object()
                     if obj.get('/Subtype') == '/Widget':
-                        # Set border width to 0
                         obj[NameObject('/BS')] = DictionaryObject({
                             NameObject('/W'): NumberObject(0)
                         })
-                        # Remove both /BC (border color) and /BG (background color)
                         if '/MK' in obj:
                             mk = obj['/MK'].get_object()
                             new_mk = DictionaryObject()
@@ -626,16 +610,13 @@ class BIR1604E(models.Model):
                                     new_mk[NameObject(k)] = v
                             obj[NameObject('/MK')] = new_mk
 
-        # Fill fields after removing borders
         for page in writer.pages:
             writer.update_page_form_field_values(page, field_map)
 
-        # Write to bytes buffer
         buf = io.BytesIO()
         writer.write(buf)
         pdf_bytes = buf.getvalue()
 
-        # Attach the filled PDF to this record
         filename = f'BIR_1604E_{self.year}_{self.company_id.name}.pdf'
         attachment = self.env['ir.attachment'].create({
             'name': filename,
@@ -651,14 +632,14 @@ class BIR1604E(models.Model):
             'url': f'/web/content/{attachment.id}?download=true',
             'target': 'self',
         }
-   
+
     #####################
     # Generate pdf End
     ########################
-    
+
     def action_reset_to_draft(self):
         self.state = 'draft'
-    
+
     def action_submit(self):
         self.state = 'submitted'
 
@@ -667,7 +648,7 @@ class BIR1604ESchedule1(models.Model):
     _name = 'bir.1604e.schedule1'
     _description = 'BIR 1604-E Schedule 1 - Form 1601-E Remittances'
     _order = 'form_id, month'
-    
+
     form_id = fields.Many2one('bir.1604e', string='Form', required=True, ondelete='cascade')
     month = fields.Selection([
         ('JAN', 'January'),
@@ -688,7 +669,7 @@ class BIR1604ESchedule1(models.Model):
     taxes_withheld = fields.Float(string='Taxes Withheld')
     penalties = fields.Float(string='Penalties')
     total_remitted = fields.Float(string='Total Amount Remitted', compute='_compute_total', store=True)
-    
+
     @api.depends('taxes_withheld', 'penalties')
     def _compute_total(self):
         for record in self:
@@ -699,7 +680,7 @@ class BIR1604ESchedule2(models.Model):
     _name = 'bir.1604e.schedule2'
     _description = 'BIR 1604-E Schedule 2 - Form 1606 Remittances'
     _order = 'form_id, month'
-    
+
     form_id = fields.Many2one('bir.1604e', string='Form', required=True, ondelete='cascade')
     month = fields.Selection([
         ('JAN', 'January'),
@@ -720,7 +701,7 @@ class BIR1604ESchedule2(models.Model):
     taxes_withheld = fields.Float(string='Taxes Withheld')
     penalties = fields.Float(string='Penalties')
     total_remitted = fields.Float(string='Total Amount Remitted', compute='_compute_total', store=True)
-    
+
     @api.depends('taxes_withheld', 'penalties')
     def _compute_total(self):
         for record in self:
@@ -731,12 +712,17 @@ class BIR1604ESchedule3(models.Model):
     _name = 'bir.1604e.schedule3'
     _description = 'BIR 1604-E Schedule 3 - Exempt from Withholding'
     _order = 'form_id, sequence'
-    
+
     form_id = fields.Many2one('bir.1604e', string='Form', required=True, ondelete='cascade')
     sequence = fields.Integer(string='Seq No.', required=True)
     tin = fields.Char(string='TIN')
     payee_name = fields.Char(string='Name of Payee', required=True)
-    atc_code = fields.Char(string='ATC')
+    atc_id = fields.Many2one(
+        'account.tax',
+        string='ATC',
+        domain=[('type_tax_use', '=', 'purchase')]
+    )
+    atc_code = fields.Char(string='ATC Code', related='atc_id.l10n_ph_atc', store=True)
     nature_income = fields.Char(string='Nature of Income Payment')
     income_payment = fields.Float(string='Amount of Income Payment')
 
@@ -745,12 +731,22 @@ class BIR1604ESchedule4(models.Model):
     _name = 'bir.1604e.schedule4'
     _description = 'BIR 1604-E Schedule 4 - Expanded Withholding Tax'
     _order = 'form_id, sequence'
-    
+
     form_id = fields.Many2one('bir.1604e', string='Form', required=True, ondelete='cascade')
     sequence = fields.Integer(string='Seq No.', required=True)
     tin = fields.Char(string='TIN')
     payee_name = fields.Char(string='Name of Payee', required=True)
-    atc_code = fields.Char(string='ATC')
+    atc_id = fields.Many2one(
+        'account.tax',
+        string='ATC',
+        domain=[('type_tax_use', '=', 'purchase')]
+    )
+    atc_code = fields.Char(string='ATC Code', related='atc_id.l10n_ph_atc', store=True)
     nature_income = fields.Char(string='Nature of Income Payment')
     income_payment = fields.Float(string='Amount of Income Payment')
     tax_rate = fields.Float(string='Rate of Tax (%)')
+
+    @api.onchange('atc_id')
+    def _onchange_atc_id(self):
+        if self.atc_id:
+            self.tax_rate = self.atc_id.amount
