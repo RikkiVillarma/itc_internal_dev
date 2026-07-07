@@ -12,7 +12,7 @@
               <tr>
                 <td style="width:60%; vertical-align:top; padding:5px; border:1px solid black;">
                   <strong style="font-size:18px;">ACKNOWLEDGEMENT RECEIPT</strong><br/>
-                  <strong>AR NO.:</strong> <span t-field="doc.name"/><br/>
+                  <strong>AR NO.:</strong> <span t-esc="doc.name.replace('SI', 'AR')"/><br/>
                   <strong>BR:</strong> BR-00000-MAIN
                 </td>
                 <td style="width:40%; vertical-align:bottom; padding:5px; text-align:right; border:1px solid black;">
@@ -305,7 +305,7 @@
     <field name="model">account.move</field>
     <field name="report_type">qweb-pdf</field>
     <field name="report_name">itc_internal_dev.report_custom_acknowledgement_receipt_template</field>
-    <field name="print_report_name">'Acknowledgment Receipt - %s' % (object.name)</field>
+    <field name="print_report_name">'Acknowledgment Receipt - %s' % (object.name.replace('SI', 'AR'))</field>
     <field name="binding_model_id" ref="account.model_account_move"/>
     <field name="binding_type">report</field>
   </record>
