@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="account_move_form_inherit_withholding_tax" model="ir.ui.view">
+        <field name="name">account.move.form.inherit.withholding.tax</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Replace stock Taxes column (Invoice Lines tab only) with filtered display field -->
+            <xpath expr="//field[@name='invoice_line_ids']/list/field[@name='tax_ids']" position="replace">
+                <field name="display_tax_ids"
+                       widget="many2many_tax_tags"
+                       domain="[('type_tax_use', '=?', parent.invoice_filter_type_domain), ('company_id', 'parent_of', parent.company_id), ('country_id', '=', parent.tax_country_id)]"
+                       context="{'append_type_to_tax_name': not parent.invoice_filter_type_domain, 'active_test': True}"
+                       options="{'no_create': True}"
+                       optional="show"
+                       string="Taxes"/>
+            </xpath>
+
+            <!-- New Withholding Tax column -->
+            <xpath expr="//field[@name='invoice_line_ids']/list/field[@name='price_subtotal']" position="before">
+                <field name="withholding_tax_ids"
+                       widget="many2many_tax_tags"
+                       domain="[('type_tax_use', '=?', parent.invoice_filter_type_domain), ('company_id', 'parent_of', parent.company_id), ('country_id', '=', parent.tax_country_id)]"
+                       context="{'append_type_to_tax_name': not parent.invoice_filter_type_domain, 'active_test': True}"
+                       options="{'no_create': True}"
+                       optional="show"/>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>

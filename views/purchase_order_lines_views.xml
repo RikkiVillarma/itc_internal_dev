@@ -5,11 +5,22 @@
         <field name="model">purchase.order</field>
         <field name="inherit_id" ref="purchase.purchase_order_form"/>
         <field name="arch" type="xml">
+
+            <!-- Replace stock Taxes column with filtered display field -->
+            <xpath expr="//field[@name='order_line']//field[@name='taxes_id']" position="replace">
+                <field name="display_tax_ids"
+                       widget="many2many_tags"
+                       optional="show"
+                       string="Taxes"/>
+            </xpath>
+
+            <!-- Withholding Tax column -->
             <xpath expr="//field[@name='order_line']//field[@name='price_subtotal']" position="before">
                 <field name="withholding_tax_ids"
                        widget="many2many_tags"
                        optional="show"/>
             </xpath>
+
         </field>
     </record>
 </odoo>
