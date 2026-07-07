@@ -90,19 +90,23 @@ class Purchase(models.Model):
                 vals['x_noted_by_date'] = date.today()
         return super().write(vals)
 
-
-
 class PurchaseOrderLine(models.Model):
     _inherit = 'purchase.order.line'
 
+    display_tax_ids = fields.Many2many(
+        'account.tax',
+        compute='_compute_split_taxes',
+        inverse='_inverse_display_tax_ids',
+        string='Taxes',
+        domain=[('type_tax_use', '=', 'purchase')],
+    )
+
     withholding_tax_ids = fields.Many2many(
         'account.tax',
-        'purchase_order_line_withholding_tax_rel',
-        'order_line_id',
-        'tax_id',
+        compute='_compute_split_taxes',
+        inverse='_inverse_withholding_tax_ids',
         string='Withholding Tax',
         domain=[('type_tax_use', '=', 'purchase')],
-        context={'default_type_tax_use': 'purchase', 'search_view_ref': 'account.account_tax_view_search'},
     )
 
     def _is_withholding_tax(self, tax):
@@ -110,27 +114,61 @@ class PurchaseOrderLine(models.Model):
         TODO: replace with finalized identification logic (tax group / flag)."""
         return tax.amount < 0
 
-    @api.onchange('withholding_tax_ids')
-    def _onchange_withholding_tax_ids(self):
+    @api.depends('taxes_id')
+    def _compute_split_taxes(self):
         for line in self:
-            non_wht_taxes = line.taxes_id.filtered(lambda t: not line._is_withholding_tax(t))
-            line.taxes_id = non_wht_taxes + line.withholding_tax_ids
+            wht = line.taxes_id.filtered(line._is_withholding_tax)
+            line.withholding_tax_ids = wht
+            line.display_tax_ids = line.taxes_id - wht
 
-    @api.model_create_multi
-    def create(self, vals_list):
-        lines = super().create(vals_list)
-        lines._sync_withholding_into_taxes()
-        return lines
-
-    def write(self, vals):
-        res = super().write(vals)
-        if 'withholding_tax_ids' in vals:
-            self._sync_withholding_into_taxes()
-        return res
-
-    def _sync_withholding_into_taxes(self):
+    def _inverse_display_tax_ids(self):
         for line in self:
-            non_wht_taxes = line.taxes_id.filtered(lambda t: not line._is_withholding_tax(t))
-            new_taxes = non_wht_taxes + line.withholding_tax_ids
-            if new_taxes != line.taxes_id:
-                line.taxes_id = new_taxes
+            line.taxes_id = line.display_tax_ids + line.withholding_tax_ids
+
+    def _inverse_withholding_tax_ids(self):
+        for line in self:
+            line.taxes_id = line.display_tax_ids + line.withholding_tax_ids
+
+    @api.onchange('display_tax_ids', 'withholding_tax_ids')
+    def _onchange_split_taxes(self):
+        for line in self:
+            line.taxes_id = line.display_tax_ids + line.withholding_tax_ids
+
+class AccountMoveLine(models.Model):
+    _inherit = 'account.move.line'
+
+    display_tax_ids = fields.Many2many(
+        'account.tax',
+        compute='_compute_split_taxes',
+        inverse='_inverse_display_tax_ids',
+        string='Taxes',
+        domain=[('type_tax_use', '=', 'purchase')],
+    )
+
+    withholding_tax_ids = fields.Many2many(
+        'account.tax',
+        compute='_compute_split_taxes',
+        inverse='_inverse_withholding_tax_ids',
+        string='Withholding Taxes',
+        domain=[('type_tax_use', '=', 'purchase')],
+    )
+
+    def _is_withholding_tax(self, tax):
+        """Placeholder criterion — amount < 0.
+        TODO: replace with finalized identification logic (tax group / flag)."""
+        return tax.amount < 0
+
+    @api.depends('tax_ids')
+    def _compute_split_taxes(self):
+        for line in self:
+            wht = line.tax_ids.filtered(line._is_withholding_tax)
+            line.withholding_tax_ids = wht
+            line.display_tax_ids = line.tax_ids - wht
+
+    def _inverse_display_tax_ids(self):
+        for line in self:
+            line.tax_ids = line.display_tax_ids + line.withholding_tax_ids
+
+    def _inverse_withholding_tax_ids(self):
+        for line in self:
+            line.tax_ids = line.display_tax_ids + line.withholding_tax_ids
