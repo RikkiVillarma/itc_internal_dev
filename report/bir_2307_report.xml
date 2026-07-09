@@ -1,744 +1,153 @@
 <odoo>
-
-    <!-- ============================= -->
-    <!-- QWEB TEMPLATE -->
-    <!-- ============================= -->
-   <template id="report_bir_2307">
+    <template id="report_bir_2307_overlay">
         <t t-call="web.html_container">
             <t t-foreach="docs" t-as="o">
                 <t t-foreach="o.get_2307_details()" t-as="line">
-            <main style="">
-            <div  class="page"
-                    style="font-family: Arial, sans-serif;
-                            font-size: 8pt;
-                            padding: 3px;
-                            page-break-after: always;">
+                    <main>
+                                <div style="position:absolute; top:0; left:0; width:300mm; height:450mm; z-index:0;
+                                            background-image:url('https://res.cloudinary.com/dnb0wqyr8/image/upload/v1783562580/BIR2307_en6bpx.jpg');
+                                            background-size:100% 100%;
+                                            background-repeat:no-repeat;
+                                            background-position:top left;"></div>
+                            <!-- ============ PERIOD ============ -->
+                        <t t-set="from_str" t-value="o.date.strftime('%m %d %Y')"/>
+                        <t t-set="to_str" t-value="o.date.strftime('%m %d %Y')"/>
+                        <div style="position:absolute; top:197px; left:297px; font-size:15pt; z-index:1; letter-spacing: 5px; white-space:nowrap;">
+                            <t t-esc="from_str"/>
+                        </div>
+                        <div style="position:absolute; top:197px; left:750px; font-size:15pt; z-index:1; letter-spacing: 5px; white-space:nowrap;">
+                            <t t-esc="to_str"/>
+                        </div>
 
-                            <table style="width:100%; margin:0; border-collapse:collapse;">
-                                <!-- Row 1: For BIR Use Only -->
-                                <tr>
-                                    <td style="padding:3px 8px; font-size:8pt; width:15%; vertical-align:top;">
-                                        <span style="font-weight:bold;">For BIR</span> BCS/ <br/>
-                                        <span style="font-weight:bold;">Use Only</span> Item:
-                                    </td>
+                        <!-- ============ PART I: PAYEE ============ -->
+                        <div style="position:absolute; top:255px; left:395px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
+                            <t t-esc="o.partner_id.vat or ''"/>
+                        </div>
+                        <div style="position:absolute; top:308px; left:65px; font-size:11pt; z-index:1; white-space:nowrap;">
+                            <t t-esc="o.partner_id.name"/>
+                        </div>
+                        <div style="position:absolute; top:353px; left:65px; width:714.4px; font-size:11pt; z-index:1; white-space:nowrap;">
+                            <t t-esc="', '.join(filter(None, [o.partner_id.street, o.partner_id.street2, o.partner_id.city]))"/>
+                        </div>
+                        <div style="position:absolute; top:359px; left:1005px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
+                            <t t-esc="o.partner_id.zip"/>
+                        </div>
+                        <!-- ============ PART II: PAYOR ============ -->
+                        <div style="position:absolute; top:465px; left:390px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
+                            <t t-esc="line['corporation'].vat or '0000'"/>
+                        </div>
 
-                                    <td colspan="2" style="padding:3px 8px; font-size:8pt; ">
-                                        <!-- HEADER CONTENT -->
-                                        <table style="margin:0 auto; border-collapse:collapse;">
-                                            <tr>
-                                                <!-- Logo -->
-                                                <td style="width:55px; vertical-align:middle; text-align:right; padding-right:10px;">
-                                                    <img src="https://logodix.com/logo/1578333.png"
-                                                        style="width:50px; height:50px; object-fit:contain;"/>
-                                                </td>
+                        <div style="position:absolute; top:512px; left:65px; font-size:11pt; z-index:1; white-space:nowrap;">
+                            <t t-esc="line['corporation'].name"/>
+                        </div>
 
-                                                <!-- Agency Info -->
-                                                <td style="vertical-align:middle; text-align:left; line-height:1.2;">
-                                                    <div style="font-size:8pt;">Republic of the Philippines</div>
-                                                    <div style="font-size:8pt; font-weight:bold;">Department of Finance</div>
-                                                    <div style="font-size:8pt; font-weight:bold;">Bureau of Internal Revenue</div>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
+                        <div style="position:absolute; top:565px; left:65px; width:714.4px; font-size:11pt; z-index:1; white-space:nowrap;">
+                            <t t-esc="', '.join(filter(None, [line['corporation'].street, line['corporation'].street2, line['corporation'].city]))"/>
+                        </div>
 
-
-                    <!-- HEADER -->
-                    <table style="width:100%; border-collapse:collapse; border:2px solid black; margin:0;">
-
-                        <tr>
-                            <!-- LEFT: FORM NUMBER -->
-                            <td style="border-right:2px solid black; padding:4px; vertical-align:middle; width:15%;">
-                                <div style="text-align:center;">
-                                    <div>
-                                        <span style="font-size:7pt;">BIR Form No.</span> <br />
-                                        <span style="font-size:34pt; font-weight:bold;">2307</span> <br />
-                                        <span style="font-size:7pt;">January 2018 (ENCS)</span>
-                                    </div>
-                                </div>
-                            </td>
-
-                            <!-- CENTER: TITLE -->
-                            <td style="padding:2px; vertical-align:middle; text-align:center;">
-                                <div style="font-size:17pt; font-weight:bold; line-height:1.15; padding:0 20px;">
-                                    Certificate of Creditable Tax<br/>
-                                    Withheld at Source
-                                </div>
-                            </td>
-
-                            <!-- RIGHT: BARCODE -->
-                            <td style="border-left:1px solid black; padding:4px; vertical-align:middle; text-align:center; width:20%;">
-                                <div style="
-                                    width:100%;
-                                    height:70px;
-                                    
-                                    background:white;
-                                    display:flex;
-                                    align-items:center;
-                                    justify-content:center;
-                                    margin-bottom:2px;
-                                ">
-                                    <img src="https://res.cloudinary.com/dfa1bz6nk/image/upload/v1767769591/odoo/01a_barcode_ylqhbb.png"
-                                        style=" width:100%; height:70px;"/>
-                                </div>
-                                <div style="font-size:7pt;">2307 01/18ENCS</div>
-                            </td>
-                        </tr>
-
-                    </table>
-
-                    <!-- /HEADER -->
-
-                    <!-- FOR THE PERIOD SECTION -->
-                    <table style="width: 100%; border-collapse: collapse; border: 2px solid black; margin: 0;">
-                        <tr> <td colspan="2" style="border-bottom:1px solid black;"> Fill in all applicable spaces. Mark all appropriate boxes with an "X".</td></tr>
-                        <tr>
-                            <td style="background-color: #DCDCDC; width: 50%; padding: 5px;  border-top: 0; border-left: 0; border-bottom: 0;">
-                                <div style="background-color: #DCDCDC; white-space: nowrap; font-size: 8pt;">
-
-                                    <span style="margin-right:15px; vertical-align: middle; font-size:9pt;">
-                                        <b>1</b> For the Period
-                                    </span>
-
-                                    <span style="margin-right:5px; vertical-align: middle;">
-                                        From
-                                    </span>
-
-                                    <!-- Date values -->
-                                    <t t-set="from_mm" t-value="o.date.strftime('%m')"/>
-                                    <t t-set="from_dd" t-value="o.date.strftime('%d')"/>
-                                    <t t-set="from_yy" t-value="o.date.strftime('%y')"/>
-
-                                    <!-- MM -->
-                                    <span t-foreach="from_mm" t-as="d"
-                                        style="display:inline-block;
-                                        background-color: white;
-                                            width:15px;
-                                            height:25px;
-                                            line-height:25px;
-                                            border:1px solid black;
-                                            text-align:center;
-                                            vertical-align: middle;
-                                        ">
-                                        <t t-esc="d"/>
-                                    </span>
-
-                                    <!-- DD -->
-                                    <span t-foreach="from_dd" t-as="d"
-                                        style="display:inline-block;
-                                        background-color: white;
-                                            width:15px;
-                                            height:25px;
-                                            line-height:25px;
-                                            border:1px solid black;
-                                            text-align:center;
-                                            vertical-align: middle;
-                                            ">
-                                        <t t-esc="d"/>
-                                    </span>
-
-                                    <!-- YY -->
-                                    <span t-foreach="from_yy" t-as="d"
-                                        style="display:inline-block;
-                                        background-color: white;
-                                            width:15px;
-                                            height:25px;
-                                            line-height:25px;
-                                            border:1px solid black;
-                                            text-align:center;
-                                            vertical-align: middle;
-                                            ">
-                                        <t t-esc="d"/>
-                                    </span>
-
-                                    <span style="font-size:9pt; margin-left:5px; vertical-align: middle; font-style: italic;">
-                                        (MM/DD/YY)
-                                    </span>
-
-                                </div>
-
-                            </td>
-                            <td style="background-color: #DCDCDC;width: 50%; padding: 5px; border: 0; text-align: right; ">
-                                <div style="background-color: #DCDCDC; white-space: nowrap; font-size: 8pt; margin-right:20px;">
-
-                                    <span style="margin-right:5px; vertical-align: middle;">
-                                        To
-                                    </span>
-
-                                    <!-- Date values -->
-                                    <t t-set="to_mm" t-value="o.date.strftime('%m')"/>
-                                    <t t-set="to_dd" t-value="o.date.strftime('%d')"/>
-                                    <t t-set="to_yy" t-value="o.date.strftime('%y')"/>
-
-                                    <!-- MM -->
-                                    <span t-foreach="to_mm" t-as="d"
-                                        style="background-color: white;
-                                            display:inline-block;
-                                            width:15px;
-                                            height:25px;
-                                            line-height:25px;
-                                            border:1px solid black;
-                                            text-align:center;
-                                            vertical-align: middle;
-                                            ">
-                                        <t t-esc="d"/>
-                                    </span>
-
-
-                                    <!-- DD -->
-                                    <span t-foreach="to_dd" t-as="d"
-                                        style="display:inline-block;
-                                        background-color: white;
-                                            width:15px;
-                                            height:25px;
-                                            line-height:25px;
-                                            border:1px solid black;
-                                            text-align:center;
-                                            vertical-align: middle;
-                                            ">
-                                        <t t-esc="d"/>
-                                    </span>
-
-                                    <!-- YY -->
-                                    <span t-foreach="to_yy" t-as="d"
-                                        style="display:inline-block;
-                                        background-color: white;
-                                            width:15px;
-                                            height:25px;
-                                            line-height:25px;
-                                            border:1px solid black;
-                                            text-align:center;
-                                            vertical-align: middle;
-                                        ">
-                                        <t t-esc="d"/>
-                                    </span>
-
-                                    <span style="font-size:9pt; margin-left:5px; vertical-align: middle; font-style: italic;">
-                                        (MM/DD/YY)
-                                    </span>
-
-                                </div>
-                            </td>
-                        </tr>
-                    </table>
-                    <!-- /FOR THE PERIOD SECTION -->
-
-                    <!-- PART I: PAYEE INFORMATION -->
-                    <table style="width: 100%; border-collapse: collapse; border: 2px solid black; border-top: 0; margin: 0; font-size: 9pt;">
-                        <!-- Part I Header -->
-                        <tr>
-                            <td colspan="2" style="text-align:center; background-color: #DCDCDC;  border-bottom: 1px solid black; font-weight: bold; border-left: 0; border-right: 0;">
-                                Part I - Income Recipient/Payee Information
-
-                            </td>
-                        </tr>
-
-                        <!-- Row 2: TIN -->
-                        <tr>
-                            <td style="background-color: #DCDCDC; width: 300px;  border-bottom: 1px solid black; border-left: 0;">
-                                <span style="font-weight: bold; margin-left: 7px;">2</span> Taxpayer Identification Number <i>(TIN)</i>
-                            </td>
-                            <td style="background-color:#DCDCDC; padding:5px; border-bottom:1px solid black; border-right:0;">
-                                <div style="display:flex; align-items:center;">
-
-                                    <!-- Get VAT -->
-                                    <t t-set="vendor_vat" t-value="o.partner_id.vat"/>
-
-                                    <!-- IF VAT EXISTS -->
-                                    <t t-if="vendor_vat">
-                                        <span t-foreach="vendor_vat" t-as="d"
-                                            style="
-                                                display:inline-block;
-                                                background-color:white;
-                                                width:20px;
-                                                height:25px;
-                                                line-height:25px;
-                                                border:1px solid black;
-                                                text-align:center;
-                                                vertical-align:middle;
-                                                font-size:9pt;
-                                                font-family:Arial, sans-serif;
-                                            ">
-                                            <t t-esc="d"/>
-                                        </span>
-                                    </t>
-
-                                    <!-- IF VAT IS EMPTY -->
-                                    <t t-else="">
-                                        <!-- Example: show empty boxes (adjust count as needed) -->
-                                        <span t-foreach="range(15)" t-as="i"
-                                            style="
-                                                display:inline-block;
-                                                background-color:white;
-                                                width:20px;
-                                                height:25px;
-                                                line-height:25px;
-                                                border:1px solid black;
-                                                text-align:center;
-                                                vertical-align:middle;
-                                                font-size:9pt;
-                                                font-family:Arial, sans-serif;
-                                            ">
-                                            
-                                        </span>
-                                    </t>
-
-                                </div>
-                            </td>
-
-                        </tr>
-
-                        <!-- Row 3: Payee's Name -->
-                        <tr>
-                            <td colspan="2" style="background-color: #DCDCDC; padding: 5px 10px; width: 400px;  border-bottom: 1px solid black; border-left: 0;">
-                                <span style="font-weight: bold;">3</span> Payee's Name <i> (Last Name, First Name, Middle Name for Individuals) (Registered Name for Non-Individuals)</i>
-                                <t t-set="payee" t-value="o.partner_id.name"/>
-                                <div style="margin-left: 10px; background-color: white; border: 1px solid black; width:830px; vertical-align:middle; height:25px; line-height:25px; font-size:9pt;">
-                                    <t t-esc="payee"/>
-                                </div>
-                            </td>
-                        </tr>
-                        
-
-                        <!-- Row 4: Registered Address -->
-                        <tr>
-                            <td colspan="2" style="background-color:#DCDCDC; padding:5px 10px; border-bottom:1px solid black; border-left:0;">
-
-                                <table style="width:100%; border-collapse:collapse;">
-                                    <tr>
-                                        <!-- REGISTERED ADDRESS -->
-                                        <td style="width:88%; padding-right:10px; vertical-align:middle;">
-                                            <span style="font-weight:bold; margin-right:5px; font-size:9pt;">4</span> Registered Address
-                                            <div style="margin-left: 10px; background-color:white; border:1px solid black; vertical-align:middle; height:25px; line-height:25px; margin-top:3px; font-size:9pt;">
-                                               <t t-esc="
-                                                    ', '.join(filter(None, [
-                                                        o.partner_id.street,
-                                                        o.partner_id.street2,
-                                                        o.partner_id.city,
-                                                    ]))
-                                                "/>
-                                            </div>
-                                        </td>
-
-                                        <!-- ZIP CODE -->
-                                        <td style="width:20%; vertical-align:middle;">
-                                            <span style="font-weight:bold; margin-right:5px; font-size:9pt;">4A</span> Zip Code
-                                            <div style="display:flex; margin-top:3px; gap:1px;">
-                                                <t t-set="zip_code" t-value="(o.partner_id.zip or '').ljust(4)"/>
-                                                <span t-foreach="zip_code" t-as="d"
-                                                    style="background-color:white; display:inline-block; width:20px; height:25px; line-height:25px; border:1px solid black; text-align:center; font-size:9pt; ">
-                                                    <t t-esc="d"/>
-                                                </span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-
-                            </td>
-                        </tr>
-
-                        <!-- Row 5: Foreign Address -->
-                        <tr>
-                            <td colspan="2" style="background-color: #DCDCDC; padding: 5px 10px; width: 400px;  border-bottom: 1px solid black; border-left: 0;">
-                                <span style="font-weight: bold;">5</span> Foreign Address, <i>if applicable</i>
-
-                                <div style="margin-left: 10px; background-color: white; border: 1px solid black; vertical-align:middle; height:25px; line-height:25px;width:830px;">
-                                
-                                </div>
-                            </td>
-                        </tr>
-                    </table>
-                    <!-- /PART I -->
-
-                    <!-- PART II: PAYOR INFORMATION -->
-                    <table style="width: 100%; border-collapse: collapse; border: 2px solid black; border-top: 0; margin: 0; font-size: 9pt;">
-                        <!-- Part I Header -->
-                        <tr>
-                            <td colspan="2" style="text-align:center; background-color: #DCDCDC;  border-bottom: 1px solid black; font-weight: bold; border-left: 0; border-right: 0;">
-                                Part II - Withholding Agent/Payor Information
-                            </td>
-                        </tr>
-
-                        <!-- Row 2: TIN -->
-                        <tr>
-                            <td style="background-color: #DCDCDC; width: 300px;  border-bottom: 1px solid black; border-left: 0;">
-                                <span style="font-weight: bold; margin-left: 7px; font-size: 9pt;">6</span> Taxpayer Identification Number <i>(TIN)</i>
-                            </td>
-                            <td style=" background-color: #DCDCDC;padding: 5px; border-bottom: 1px solid black; border-right: 0;">
-                                 <div style="display: flex; align-items: center;">
-                                    <t t-set="corporation_vat" t-value="line['corporation'].vat"/>
-                                    <!-- TIN boxes with darker separators -->
-                                    <t t-if="corporation_vat">
-                                        <span t-foreach="corporation_vat" t-as="d"
-                                            style="
-                                                display:inline-block;
-                                                background-color:white;
-                                                width:20px;
-                                                height:25px;
-                                                line-height:25px;
-                                                border:1px solid black;
-                                                text-align:center;
-                                                vertical-align:middle;
-                                                font-size:9pt;
-                                                font-family:Arial, sans-serif;
-                                            ">
-                                            <t t-esc="d"/>
-                                        </span>
-                                    </t>
-
-                                    <!-- IF VAT IS EMPTY -->
-                                    <t t-else="">
-                                        <!-- Example: show empty boxes (adjust count as needed) -->
-                                        <span t-foreach="range(15)" t-as="i"
-                                            style="
-                                                display:inline-block;
-                                                background-color:white;
-                                                width:20px;
-                                                height:25px;
-                                                line-height:25px;
-                                                border:1px solid black;
-                                                text-align:center;
-                                                vertical-align:middle;
-                                                font-size:9pt;
-                                                font-family:Arial, sans-serif;
-                                            ">
-                                            
-                                        </span>
-                                    </t>
-                                    
-                                </div>
-                            </td>
-                        </tr>
-
-                        <!-- Row 3: Payee's Name -->
-                        <tr>
-                            <td colspan="2" style="background-color: #DCDCDC; padding: 5px 10px; width: 400px;  border-bottom: 1px solid black; border-left: 0;">
-                                <span style="font-weight: bold;">7</span> Payor's Name <i> (Last Name, First Name, Middle Name for Individuals) (Registered Name for Non-Individuals)</i>
-
-                                <div style="margin-left: 10px; background-color: white; border: 1px solid black; width:830px; vertical-align:middle; height:25px; line-height:25px; font-size:9pt;">
-                                    <t t-esc="line['corporation'].name"/>
-                                </div>
-                            </td>
-                        </tr>
-                        
-
-                        <!-- Row 4: Registered Address -->
-                        <tr>
-                            <td colspan="2" style="background-color:#DCDCDC; padding:5px 10px; border-bottom:1px solid black; border-left:0;">
-
-                                <table style="width:100%; border-collapse:collapse;">
-                                    <tr>
-                                        <!-- REGISTERED ADDRESS -->
-                                        <td style="width:88%; padding-right:10px; vertical-align:middle; font-size:9pt;">
-                                            <span style="font-weight:bold; font-size:9pt;">8</span> Registered Address
-                                            <div style="margin-left:10px; background-color:white; border:1px solid black; vertical-align:middle; height:25px; line-height:25px; font-size:9pt; margin-top:3px;">
-                                                <t t-esc="
-                                                    ', '.join(filter(None, [
-                                                        line['corporation'].street,
-                                                        line['corporation'].street2,
-                                                        line['corporation'].city,
-                                                    ]))
-                                                "/>
-                                            </div>
-                                        </td>
-
-
-                                        <!-- ZIP CODE -->
-                                        <td style="width:20%; vertical-align:middle; font-size:9pt;">
-                                            <span style="font-weight:bold; margin-right:5px; font-size:9pt;">8A</span> Zip Code
-                                            <div style="display:flex; margin-top:3px; gap:1px;">
-                                                <t t-set="zip_code" t-value="(o.company_id.zip or '').ljust(4)"/>
-                                                <span t-foreach="zip_code" t-as="d"
-                                                    style="background-color:white; display:inline-block; width:20px; height:25px; line-height:25px; border:1px solid black; text-align:center; font-size:9pt; ">
-                                                    <t t-esc="d"/>
-                                                </span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-
-                            </td>
-                        </tr>
-                    </table>
-                    <!-- /PART II -->
-
-                    <!-- PART: MONTHLY INCOME AND TAX -->
-                    <table style="width: 100%; border-collapse: collapse; border: 2px solid black; border-top: 0; margin: 0; font-size: 9pt;">
-                        <!-- Part Header -->
-                        <tr>
-                            <td colspan="7" style="background-color: #DCDCDC; padding: 3px 5px; border-bottom: 1px solid black; font-weight: bold; text-align: center; border-left: 0; border-right: 0;">
-                                Part III - details of Monthly Income Payments and Tax Withheld for the Quarter
-                            </td>
-                        </tr>
-
-                        <!-- Column Headers Row 1 -->
-                        <tr style="text-align: center; font-weight: bold; font-size: 7pt;">
-                            <td rowspan="2" style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black; border-left: 0; width: 160px; vertical-align: middle;">
-                                Income Payments Subject to<br/>Expanded Withholding Tax
-                            </td>
-                            <td rowspan="2" style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black; width: 45px; vertical-align: middle;">
-                                ATC
-                            </td>
-                            <td colspan="3" style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black;">
-                                AMOUNT OF INCOME PAYMENTS
-                            </td>
-                            <td rowspan="2" style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black; width: 70px; vertical-align: middle;">
-                                Total
-                            </td>
-                            <td rowspan="2" style="background-color: #DCDCDC; padding: 5px; border-right: 0; border-bottom: 1px solid black; width: 70px; vertical-align: middle;">
-                                Tax Withheld<br/>For the Quarter
-                            </td>
-                        </tr>
-
-                        <!-- Column Headers Row 2 -->
-                        <tr style="text-align: center; font-weight: bold; font-size: 7pt;">
-                            <td style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black; width: 85px;">
-                                1st Month of<br/>the Quarter
-                            </td>
-                            <td style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black; width: 85px;">
-                                2nd Month of<br/>the Quarter
-                            </td>
-                            <td style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black; width: 85px;">
-                                3rd Month of<br/>the Quarter
-                            </td>
-                        </tr>
+                        <div style="position:absolute; top:567px; left:1005px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
+                            <t t-esc="o.company_id.zip or ''"/>
+                        </div>
 
                         <t t-foreach="o.get_2307_details()" t-as="corp">
-                        <t t-set="lines" t-value="corp['lines']"/>
-                        
-                        <t t-if="line['corporation'] == corp['corporation']">
-                    
-                        <!-- Loop through each line for this corporation -->
-                        <tr t-foreach="lines" t-as="l">
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;">
-                                <t t-esc="l['description']"/>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:center;">
-                                <t t-esc="l['atc']"/>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                <t t-if="l['month'] in [1,4,7,10]">
-                                    <!-- <span t-field="o.currency_id.symbol"/> --> <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
+                            <t t-if="line['corporation'] == corp['corporation']">
+                                <t t-foreach="corp['lines']" t-as="l">
+                                    <t t-if="l_index &lt; 10">
+                                        <t t-set="row_top" t-value="670 + (l_index * 25)"/>
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:38px; width:300px; font-size:9pt; z-index:1; white-space:nowrap;">
+                                            <t t-esc="l['description']"/>
+                                        </div>
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:335px; font-size:9pt; z-index:1; white-space:nowrap;">
+                                            <t t-esc="l['atc']"/>
+                                        </div>
+                                        <!--======================MONTH====================-->
+                                        <t t-if="l['month'] in [1,4,7,10]">
+                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:350px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                                <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
+                                            </div>
+                                        </t>
+                                        <t t-if="l['month'] in [2,5,8,11]">
+                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:490px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                                <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+                                            </div>
+                                        </t>
+                                        <t t-if="l['month'] in [3,6,9,12]">
+                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:625px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                                <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+                                            </div>
+                                        </t>
+                                        <!--=================== TOTALS AND WHTAX COLUMN=================== -->
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:750px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+                                        </div>
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:860px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <t t-esc="'{:,.2f}'.format(l['tax_withheld'] or 0.00)"/>
+                                        </div>
+                                    </t>
                                 </t>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                <t t-if="l['month'] in [2,5,8,11]">
-                                    <!-- <span t-field="o.currency_id.symbol"/> --> <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
+                                <div style="position:absolute; top:915px; left:750px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                                    <t t-esc="'{:,.2f}'.format(corp['gross_amount'])"/>
+                                </div>
+                                <div style="position:absolute; top:915px; left:860px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                                    <t t-esc="'{:,.2f}'.format(corp['tax_withheld'])"/>
+                                </div>
+                            </t>
+                        </t>
+                                        <!-- ============ PART III: TABLE 2 - Business/Excise Tax ============ -->
+                        <t t-foreach="o.get_2307_details()" t-as="corpII">
+                            <t t-foreach="corpII['lines']" t-as="l">
+                                <t t-if="l_index &lt; 9">
+                                    <t t-set="row_top" t-value="980 + (l_index * 25)"/>
+                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:38px; width:300px; font-size:9pt; z-index:1; white-space:nowrap;">
+                                        <t t-esc="l['description']"/>
+                                    </div>
+                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:335px; font-size:9pt; z-index:1; white-space:nowrap;">
+                                        <t t-esc="l['atc']"/>
+                                    </div>
+                                    <!-- ============================= MONTHS =========================================-->
+                                    <t t-if="l['month'] in [1,4,7,10]">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:350px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
+                                        </div>
+                                    </t>
+                                    <t t-if="l['month'] in [2,5,8,11]">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:490px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+                                        </div>
+                                    </t>
+                                    <t t-if="l['month'] in [3,6,9,12]">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:625px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+                                        </div>
+                                    </t>
+                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:750px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                        <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+                                    </div>
+                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:860px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                        <t t-esc="'{:,.2f}'.format(l['tax_withheld'] or 0.00)"/>
+                                    </div>
                                 </t>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                <t t-if="l['month'] in [3,6,9,12]">
-                                    <!-- <span t-field="o.currency_id.symbol"/> --> <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                                </t>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                 <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 0; border-bottom: 1px solid black; text-align:right;">
-                                 <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(l['tax_withheld'])"/>
-                            </td>
-                        </tr>
-
-                        <!-- Optional: add total row per corporation -->
-                        <tr style="font-weight: bold; font-size: 7.5pt;">
-                            <td style="background-color: #DCDCDC; padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; border-left: 0;">
-                                Total
-                            </td>
-                            <td style="border: 1px solid black;"></td>
-                            <td colspan="3" style="border: 1px solid black;"></td>
-                            <td style="text-align:right; border: 1px solid black;">
-                                 <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(corp['gross_amount'])"/>
-                            </td>
-                            <td style="text-align:right; border: 1px solid black;">
-                                <!-- <span t-field="o.currency_id.symbol"/> --> <t t-esc="'{:,.2f}'.format(corp['tax_withheld'])"/>
-                            </td>
-                        </tr>
-                    </t>
-                    </t>
-
-                        
-
-                        <!-- Second Section Header -->
-                        <tr style="font-weight: bold; font-size: 7pt;">
-                            <td style="background-color: #DCDCDC; padding: 5px; border-right: 1px solid black; border-bottom: 1px solid black; border-left: 0;">
-                                Money Payments Subject to Withholding Tax on Business/Excise Tax (Government &amp; Private)
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;"></td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;"></td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;"></td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;"></td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;"></td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;"></td>
-                        </tr>
-
-                        
-                        <t t-foreach="o.get_2307_business_details()" t-as="corpII">
-                        <t t-set="lines" t-value="corpII['lines']"/>
-                        
-                        <t t-if="line['corporation'] == corpII['corporation']">
-                    
-                        <!-- Loop through each line for this corporation -->
-                        <tr t-foreach="lines" t-as="l">
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black;">
-                                <t t-esc="l['description']"/>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:center;">
-                                <t t-esc="l['atc']"/>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                <t t-if="l['month'] in [1,4,7,10]">
-                                     <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                                </t>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                <t t-if="l['month'] in [2,5,8,11]">
-                                     <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                                </t>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                <t t-if="l['month'] in [3,6,9,12]">
-                                     <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                                </t>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; text-align:right;">
-                                 <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                            </td>
-                            <td style="padding: 6px 5px; border-right: 0; border-bottom: 1px solid black; text-align:right;">
-                                <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(l['tax_withheld'])"/>
-                            </td>
-                        </tr>
-
-                        <!-- Optional: add total row per corporation -->
-                        <tr style="font-weight: bold; font-size: 7.5pt;">
-                            <td style="background-color: #DCDCDC; padding: 6px 5px; border-right: 1px solid black; border-bottom: 1px solid black; border-left: 0;">
-                                Total
-                            </td>
-                            <td style="border: 1px solid black;"></td>
-                            <td colspan="3" style="border: 1px solid black;"></td>
-                            <td style="text-align:right; border: 1px solid black;">
-                                 <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(corpII['gross_amount'])"/>
-                            </td>
-                            <td style="text-align:right; border: 1px solid black;">
-                                 <!-- <span t-field="o.currency_id.symbol"/> --><t t-esc="'{:,.2f}'.format(corpII['tax_withheld'])"/>
-                            </td>
-                        </tr>
-                    </t>
-                    </t>
-
-
-                    </table>
-                    <!-- /PART -->
-                    <!-- DECLARATION AND SIGNATURE SECTION -->
-                    <table style="width:100%; border-collapse:collapse; border:2px solid black; border-top:0; font-size:9pt;">
-
-                        <!-- Declaration Text -->
-                        <tr>
-                            <td colspan="6"
-                                style="background:#DCDCDC; padding:5px;
-                                    border:1px solid black; border-top:0; text-align:justify;">
-                                We declare, under the penalties of perjury, that this certificate has been made in good faith,
-                                verified by me, and to the best of my knowledge and belief, is true and correct, pursuant to the
-                                provisions of the National Internal Revenue Code, as amended, and the regulations issued under
-                                authority thereof.
-                            </td>
-                        </tr>
-
-                        <!-- Space for Signature -->
-                        <tr>
-                            <td colspan="6" style="height:30px; border:1px solid black;"></td>
-                        </tr>
-
-                        <!-- Signature Label -->
-                        <tr>
-                            <td colspan="6"
-                                style="background:#DCDCDC; padding:5px; border:1px solid black;">
-                                Signature over Printed Name of Payor / Payor's Authorized Representative / Accredited Tax Agent<br/>
-                                <i>(Indicate Title/Designation and TIN)</i>
-                            </td>
-                        </tr>
-
-                        <!-- Accreditation / Dates -->
-                        <tr>
-                            <td style="background:#DCDCDC; padding:5px; border:1px solid black; width:30%;">
-                                Tax Agent Accreditation No. / Attorney's Roll No. (if applicable)
-                            </td>
-                            <td style="padding:5px; border:1px solid black; width:20%;"></td>
-
-                            <td style="background:#DCDCDC; padding:5px; border:1px solid black; width:15%; text-align:center;">
-                                Date of Issuance<br/><i>(MM/DD/YYYY)</i>
-                            </td>
-                            <td style="padding:5px; border:1px solid black; width:15%;"></td>
-
-                            <td style="background:#DCDCDC; padding:5px; border:1px solid black; width:10%; text-align:center;">
-                                Date of Expiration<br/><i>(MM/DD/YYYY)</i>
-                            </td>
-                            <td style="padding:5px; border:1px solid black; width:10%;"></td>
-                        </tr>
-
-                        <!-- Conforme -->
-                        <tr>
-                            <td colspan="6"
-                                style="background:#DCDCDC; padding:5px; font-weight:bold;
-                                    border:1px solid black; text-align:center;">
-                                CONFORME:
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td colspan="6" style="height:40px; border:1px solid black;">GINA G. ROSALES, CPA, LLB, MA-T/CHIEF ACCOUNTANT/120-163-961-000</td>
-                        </tr>
-
-                        <!-- Conforme Signature -->
-                        <tr>
-                            <td colspan="6"
-                                style="background:#DCDCDC; padding:5px; border:1px solid black;">
-                                Signature over Printed Name of Payee / Payee's Authorized Representative<br/>
-                                <i>(Indicate Title/Designation and TIN)</i>
-                            </td>
-                        </tr>
-
-                        <!-- Accreditation / Dates (Conforme) -->
-                        <tr>
-                            <td style="background:#DCDCDC; padding:3px 5px; border:1px solid black; width:30%;">
-                                Tax Agent Accreditation No. / Attorney's Roll No. (if applicable)
-                            </td>
-                            <td style="padding:3px 5px; border:1px solid black; width:20%;"></td>
-
-                            <td style="background:#DCDCDC; padding:3px 5px; border:1px solid black; width:15%; text-align:center;">
-                                Date of Issuance<br/><i>(MM/DD/YYYY)</i>
-                            </td>
-                            <td style="padding:3px 5px; border:1px solid black; width:15%;"></td>
-
-                            <td style="background:#DCDCDC; padding:5px; border:1px solid black; width:10%; text-align:center;">
-                                Date of Expiration<br/><i>(MM/DD/YYYY)</i>
-                            </td>
-                            <td style="padding:3px 5px; border:1px solid black; width:10%;"></td>
-                        </tr>
-
-                    </table>
-
-
-                <!-- /DECLARATION AND SIGNATURE SECTION -->
-
-                <p>NOTE: The BIR Data Privacy is in the BIR website (www.bir.gov.ph).</p>
-            </div>
-            </main>
-
+                            </t>
+                            <!-- ===============================TOTALS II==================================== -->
+                            <div style="position:absolute; top:1225px; left:750px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                                <t t-esc="'{:,.2f}'.format(corpII['gross_amount'])"/>
+                            </div>
+                            <div style="position:absolute; top:1225px; left:860px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                                <t t-esc="'{:,.2f}'.format(corpII['tax_withheld'])"/>
+                            </div>
+                        </t>
+                    </main>
+                </t>
             </t>
         </t>
-        </t>
     </template>
-    <!-- ============================= -->
-    <!-- REPORT ACTION -->
-    <!-- ============================= -->
+
     <record id="action_report_bir_2307" model="ir.actions.report">
-        <field name="name">BIR Form 2307</field>
+        <field name="name">BIR Form 2307 (Overlay)</field>
         <field name="model">account.move</field>
         <field name="report_type">qweb-pdf</field>
-        <field name="report_name">itc_internal_dev.report_bir_2307</field>
-        <field name="report_file">itc_internal_dev.report_bir_2307</field>
+        <field name="report_name">itc_internal_dev.report_bir_2307_overlay</field>
+        <field name="report_file">itc_internal_dev.report_bir_2307_overlay</field>
         <field name="paperformat_id" ref="paperformat_bir_2307"/>
         <field name="print_report_name">'BIR_2307_%s' % (object.name)</field>
     </record>
