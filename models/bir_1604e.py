@@ -375,56 +375,59 @@ class BIR1604E(models.Model):
 
         field_map = {
             # Part I
-            'Text9':    str(self.year),
-            'Text166':  str(self.num_sheets_attached) if self.num_sheets_attached else '',
+            'Text9': '  ' + '     '.join(str(self.year)),
+            'Text166': '   ' + '     '.join(f'{self.num_sheets_attached:02d}' if self.num_sheets_attached else ''),
             'Button168': '/Yes' if self.amended_return else '/Off',
             'Button169': '/Off' if self.amended_return else '/Yes',
-            'Text4':    tin_clean,
-            'Text167':  self.rdo_code or '',
-            'Text1':    c.name or '',
-            'Text2':    (c.street or '') + (' ' + (c.street2 or '') if c.street2 else ''),
-            'Text3':    (c.city or '') + (f', {c.state_id.name}' if c.state_id else ''),
-            'Text7':    c.zip or '',
-            'Text6':    c.phone or '',
-            'Text8':    c.email or '',
+            'Text4': (' ' * 1) + '          '.join(
+                '   '.join(tin_clean[i:i+3])
+                for i in range(0, 9, 3)
+            ) + '           ' + '   '.join(tin_clean[9:]),
+            'Text167':  ' '+'   '.join(self.rdo_code or ''),
+            'Text1':    '  ' + (c.name or ''),
+            'Text2':    '  ' + (c.street or '') + (' ' + (c.street2 or '') if c.street2 else ''),
+            'Text3':    '  ' + (c.city or '') + (f', {c.state_id.name}' if c.state_id else ''),
+            'Text7':    '    '.join(c.zip or ''),
+            'Text6':    '  ' + (c.phone or ''),
+            'Text8':    '  ' + (c.email or ''),
 
             # Schedule 1 – Quarterly
             # Q1
-            'Text10': self._fmt_date(q_data['Q1']['date']),
-            'Text11': q_data['Q1']['bank'],
-            'Text14': q_data['Q1']['tra'],
-            'Text19': self._fmt_amt(q_data['Q1']['tax']),
-            'Text39': self._fmt_amt(q_data['Q1']['pen']),
-            'Text45': self._fmt_amt(q_data['Q1']['total']),
+            'Text10': ' ' + self._fmt_date(q_data['Q1']['date']),
+            'Text11': ' ' + q_data['Q1']['bank'],
+            'Text14': ' ' + q_data['Q1']['tra'],
+            'Text19': ' ' + self._fmt_amt(q_data['Q1']['tax']),
+            'Text39': ' ' + self._fmt_amt(q_data['Q1']['pen']),
+            'Text45': ' ' + self._fmt_amt(q_data['Q1']['total']),
             # Q2
-            'Text32': self._fmt_date(q_data['Q2']['date']),
-            'Text33': q_data['Q2']['bank'],
-            'Text15': q_data['Q2']['tra'],
-            'Text20': self._fmt_amt(q_data['Q2']['tax']),
-            'Text17': self._fmt_amt(q_data['Q2']['pen']),
-            'Text44': self._fmt_amt(q_data['Q2']['total']),
+            'Text32': ' ' + self._fmt_date(q_data['Q2']['date']),
+            'Text33': ' ' + q_data['Q2']['bank'],
+            'Text15': ' ' + q_data['Q2']['tra'],
+            'Text20': ' ' + self._fmt_amt(q_data['Q2']['tax']),
+            'Text17': ' ' + self._fmt_amt(q_data['Q2']['pen']),
+            'Text44': ' ' + self._fmt_amt(q_data['Q2']['total']),
             # Q3
-            'Text12': self._fmt_date(q_data['Q3']['date']),
-            'Text34': q_data['Q3']['bank'],
-            'Text16': q_data['Q3']['tra'],
-            'Text21': self._fmt_amt(q_data['Q3']['tax']),
-            'Text41': self._fmt_amt(q_data['Q3']['pen']),
-            'Text43': self._fmt_amt(q_data['Q3']['total']),
+            'Text12': ' ' + self._fmt_date(q_data['Q3']['date']),
+            'Text34': ' ' + q_data['Q3']['bank'],
+            'Text16': ' ' + q_data['Q3']['tra'],
+            'Text21': ' ' + self._fmt_amt(q_data['Q3']['tax']),
+            'Text41': ' ' + self._fmt_amt(q_data['Q3']['pen']),
+            'Text43': ' ' + self._fmt_amt(q_data['Q3']['total']),
             # Q4
-            'Text13': self._fmt_date(q_data['Q4']['date']),
-            'Text35': q_data['Q4']['bank'],
-            'Text31': q_data['Q4']['tra'],
-            'Text36': self._fmt_amt(q_data['Q4']['tax']),
-            'Text40': self._fmt_amt(q_data['Q4']['pen']),
-            'Text42': self._fmt_amt(q_data['Q4']['total']),
+            'Text13': ' ' + self._fmt_date(q_data['Q4']['date']),
+            'Text35': ' ' + q_data['Q4']['bank'],
+            'Text31': ' ' + q_data['Q4']['tra'],
+            'Text36': ' ' + self._fmt_amt(q_data['Q4']['tax']),
+            'Text40': ' ' + self._fmt_amt(q_data['Q4']['pen']),
+            'Text42': ' ' + self._fmt_amt(q_data['Q4']['total']),
             # S1 Totals
-            'Text37': self._fmt_amt(self.total_1601e_taxes),
-            'Text38': self._fmt_amt(self.total_1601e_penalties),
-            'Text18': self._fmt_amt(self.total_1601e_remitted),
+            'Text37': ' ' + self._fmt_amt(self.total_1601e_taxes),
+            'Text38': ' ' + self._fmt_amt(self.total_1601e_penalties),
+            'Text18': ' ' + self._fmt_amt(self.total_1601e_remitted),
 
             # Signature
-            'Text23': f'{self.signatory_name or ""} / {self.signatory_title or ""}',
-            'Text24': f'{self.signatory_name or ""} / {self.signatory_title or ""}',
+            'Text23': ' ' + f'{self.signatory_name or ""} / {self.signatory_title or ""}',
+            'Text24': ' ' + f'{self.signatory_name or ""} / {self.signatory_title or ""}',
             'Text25': '',
             'Text26': '',
             'Text27': '',
@@ -454,12 +457,12 @@ class BIR1604E(models.Model):
             if line:
                 total_m_tax += line.taxes_withheld
                 total_m_pen += line.penalties
-                field_map[date_k]  = self._fmt_date(line.date_remittance)
-                field_map[bank_k]  = line.bank_name or ''
-                field_map[tra_k]   = ''
-                field_map[tax_k]   = self._fmt_amt(line.taxes_withheld)
-                field_map[pen_k]   = self._fmt_amt(line.penalties)
-                field_map[total_k] = self._fmt_amt(line.total_remitted)
+                field_map[date_k]  = ' ' + self._fmt_date(line.date_remittance)
+                field_map[bank_k]  = ' ' + (line.bank_name or '')
+                field_map[tra_k]   = ' '
+                field_map[tax_k]   = ' ' + self._fmt_amt(line.taxes_withheld)
+                field_map[pen_k]   = ' ' + self._fmt_amt(line.penalties)
+                field_map[total_k] = ' ' + self._fmt_amt(line.total_remitted)
             else:
                 for k in keys:
                     field_map[k] = ''
@@ -481,12 +484,12 @@ class BIR1604E(models.Model):
             line = ewt_lines[i] if i < len(ewt_lines) else None
             if line:
                 tax_withheld = line.income_payment * (line.tax_rate / 100)
-                if seq_k:   field_map[seq_k]  = str(line.sequence)
+                if seq_k:   field_map[seq_k]  = ' ' + str(line.sequence)
                 if tin_k:   field_map[tin_k]  = line.tin or ''
                 if name_k:  field_map[name_k] = line.payee_name or ''
-                if atc_k:   field_map[atc_k]  = line.atc_code or ''
+                if atc_k:   field_map[atc_k]  = ' ' + (line.atc_code or '')
                 if amt_k:   field_map[amt_k]  = self._fmt_amt(line.income_payment)
-                if rate_k:  field_map[rate_k] = str(line.tax_rate)
+                if rate_k:  field_map[rate_k] = '  ' + str(line.tax_rate)
                 if tax_k:   field_map[tax_k]  = self._fmt_amt(tax_withheld)
             else:
                 for k in row_keys:
@@ -505,11 +508,11 @@ class BIR1604E(models.Model):
             seq_k, tin_k, name_k, atc_k, nature_k, amt_k = row_keys
             line = exempt_lines[i] if i < len(exempt_lines) else None
             if line:
-                field_map[seq_k]    = str(line.sequence)
+                field_map[seq_k]    = ' ' + str(line.sequence)
                 field_map[tin_k]    = line.tin or ''
                 field_map[name_k]   = line.payee_name or ''
-                field_map[atc_k]    = line.atc_code or ''
-                field_map[nature_k] = line.nature_income or ''
+                field_map[atc_k]    = ' ' + (line.atc_code or '')
+                field_map[nature_k] = ' ' + (line.nature_income or '')
                 field_map[amt_k]    = self._fmt_amt(line.income_payment)
             else:
                 for k in row_keys:
@@ -572,17 +575,32 @@ class BIR1604E(models.Model):
         writer.append(reader)
 
         SPACED_FIELDS = {
-            'Text4':   ('14 Tc',  9.2),
-            'Text9':   ('14 Tc',  9.2),
-            'Text166': ('4 Tc',   9.2),
-            'Text167': ('4 Tc',   9.2),
-            'Text1':   ('6 Tc',   9.2),
-            'Text2':   ('6 Tc',   9.2),
-            'Text3':   ('6 Tc',   9.2),
-            'Text6':   ('6 Tc',   9.2),
-            'Text8':   ('6 Tc',   9.2),
+            'Text4':   ('0 Tc',  9.2), #tin
+            'Text9':   ('0 Tc',  9.2), #year
+            'Text166': ('0 Tc',   9.2), #num sheets attached
+            'Text167': ('0 Tc',   9.2), #rdo code
+            'Text7':   ('0 Tc',   9.2), #zip code
+            'Text1':   ('0 Tc',   9.2), #withholding agent name
+            'Text2':   ('0 Tc',   9.2), #registered address
+            'Text3':   ('0 Tc',   9.2), #registered address
+            'Text6':   ('0 Tc',   9.2), #phone
+            'Text8':   ('0 Tc',   9.2), #email
         }
 
+        Y_OFFSETS = {
+            'Text4': -4,
+            'Text9': -4,
+            'Text166': -1,
+            'Text167': -4,
+            'Text7': -5,
+            'Text1': 0,
+            'Text2': 0,
+            'Text3': 0,
+            'Text6': 0,
+            'Text8': 0,
+        }
+
+        # Apply DA formatting with Y offsets
         for page in writer.pages:
             if '/Annots' in page:
                 for annot in page['/Annots']:
@@ -591,6 +609,17 @@ class BIR1604E(models.Model):
                         name = str(obj.get('/T', ''))
                         if name in SPACED_FIELDS:
                             tc, fs = SPACED_FIELDS[name]
+                            y_offset = Y_OFFSETS.get(name, 0)
+                            
+                            # Get existing rect to adjust Y position
+                            if '/Rect' in obj:
+                                rect = obj['/Rect']
+                                if len(rect) >= 4:
+                                    # Adjust the Y position (rect[1] is bottom, rect[3] is top)
+                                    rect[1] = NumberObject(rect[1].get_object() + y_offset)
+                                    rect[3] = NumberObject(rect[3].get_object() + y_offset)
+                            
+                            # Apply the DA string with formatting
                             new_da = f'.2666667 .2666667 .2666667 rg\n{tc}\n/F0 {fs} Tf\n'
                             obj[NameObject('/DA')] = create_string_object(new_da)
 
@@ -611,7 +640,7 @@ class BIR1604E(models.Model):
                             obj[NameObject('/MK')] = new_mk
 
         for page in writer.pages:
-            writer.update_page_form_field_values(page, field_map)
+            writer.update_page_form_field_values(page, field_map, auto_regenerate=False)
 
         buf = io.BytesIO()
         writer.write(buf)
