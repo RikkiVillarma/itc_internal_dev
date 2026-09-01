@@ -41,6 +41,7 @@
         'report/bir_2307_report.xml',
         #Views
         #'views/salary_advance_views.xml',
+        'views/purchase_journal_wizard_views.xml',
         'views/expense_sheet.xml',
         'views/expense_view.xml',
         'views/purchase_order.xml',

@@ -41,3 +41,4 @@ access_payment_register_tax_line_user,account.payment.register.tax.line user,mod
 access_ir_actions_act_window_user,access.ir.actions.act.window.user,base.model_ir_actions_act_window,base.group_user,1,1,1,1
 access_ir_actions_act_window_view_user,access.ir.actions.act.window.view.user,base.model_ir_actions_act_window_view,base.group_user,1,1,1,1
 access_collection_receipt_user,collection.receipt.user,model_collection_receipt,base.group_user,1,1,1,1
+access_purchase_journal_wizard_user,purchase.journal.wizard user,model_purchase_journal_wizard,base.group_user,1,1,1,1
