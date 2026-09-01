@@ -40,3 +40,4 @@ access_request_for_payment_line_user,request.for.payment.line user,itc_internal_
 access_payment_register_tax_line_user,account.payment.register.tax.line user,model_account_payment_register_tax_line,base.group_user,1,1,1,1
 access_ir_actions_act_window_user,access.ir.actions.act.window.user,base.model_ir_actions_act_window,base.group_user,1,1,1,1
 access_ir_actions_act_window_view_user,access.ir.actions.act.window.view.user,base.model_ir_actions_act_window_view,base.group_user,1,1,1,1
+access_collection_receipt_user,collection.receipt.user,model_collection_receipt,base.group_user,1,1,1,1
