@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- =========================
+         COLLECTION RECEIPT VIEWS
+         ========================= -->
+
+    <!-- List View -->
+    <record id="view_collection_receipt_list" model="ir.ui.view">
+        <field name="name">collection.receipt.list</field>
+        <field name="model">collection.receipt</field>
+        <field name="arch" type="xml">
+            <list string="Collection Receipts">
+                <field name="name"/>
+                <field name="date"/>
+                <field name="customer_id"/>
+                <field name="amount"/>
+                <field name="state"
+                       widget="badge"
+                       decoration-success="state == 'confirmed'"
+                       decoration-danger="state == 'cancelled'"
+                       decoration-muted="state == 'draft'"/>
+            </list>
+        </field>
+    </record>
+
+
+    <!-- Form View -->
+    <record id="view_collection_receipt_form" model="ir.ui.view">
+        <field name="name">collection.receipt.form</field>
+        <field name="model">collection.receipt</field>
+        <field name="arch" type="xml">
+            <form string="Collection Receipt">
+
+                <header>
+
+                    <button name="action_confirm"
+                            string="Confirm"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'draft'"/>
+
+                    <button name="action_cancel"
+                            string="Cancel"
+                            type="object"
+                            class="btn-secondary"
+                            invisible="state != 'draft'"/>
+
+                    <button name="action_set_to_draft"
+                            string="Set to Draft"
+                            type="object"
+                            class="btn-secondary"
+                            invisible="state == 'draft'"/>
+
+                    <field name="state"
+                           widget="statusbar"
+                           statusbar_visible="draft,confirmed,cancelled"/>
+
+                </header>
+
+                <sheet>
+
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="date"/>
+                            <field name="customer_id"/>
+                        </group>
+
+                        <group>
+                            <field name="amount"/>
+                            <field name="state" readonly="1"/>
+                        </group>
+                    </group>
+
+                </sheet>
+
+            </form>
+        </field>
+    </record>
+
+
+    <!-- Search View -->
+    <record id="view_collection_receipt_search" model="ir.ui.view">
+        <field name="name">collection.receipt.search</field>
+        <field name="model">collection.receipt</field>
+        <field name="arch" type="xml">
+            <search string="Search Collection Receipts">
+
+                <field name="name"/>
+                <field name="customer_id"/>
+                <field name="date"/>
+                <field name="state"/>
+
+                <separator/>
+
+                <filter name="filter_draft"
+                        string="Draft"
+                        domain="[('state', '=', 'draft')]"/>
+
+                <filter name="filter_confirmed"
+                        string="Confirmed"
+                        domain="[('state', '=', 'confirmed')]"/>
+
+                <filter name="filter_cancelled"
+                        string="Cancelled"
+                        domain="[('state', '=', 'cancelled')]"/>
+
+                <separator/>
+
+                <filter name="group_customer"
+                        string="Customer"
+                        context="{'group_by': 'customer_id'}"/>
+
+                <filter name="group_state"
+                        string="Status"
+                        context="{'group_by': 'state'}"/>
+
+                <filter name="group_date"
+                        string="Date"
+                        context="{'group_by': 'date'}"/>
+
+            </search>
+        </field>
+    </record>
+
+
+    <!-- =========================
+         ACTION
+         ========================= -->
+
+    <record id="action_collection_receipt" model="ir.actions.act_window">
+        <field name="name">Collection Receipts</field>
+        <field name="res_model">collection.receipt</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_collection_receipt_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first Collection Receipt
+            </p>
+        </field>
+    </record>
+
+
+    <!-- =========================
+         MENU
+         ========================= -->
+
+    <menuitem id="menu_collection_receipt_root"
+              name="Collection Receipts"
+              sequence="10"/>
+
+    <menuitem id="menu_collection_receipt"
+              name="Collection Receipts"
+              parent="menu_collection_receipt_root"
+              action="action_collection_receipt"
+              sequence="10"/>
+
+</odoo>
