@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ========================================================= -->
+    <!-- Purchase Subsidiary Journal - Wizard Form                 -->
+    <!-- ========================================================= -->
+
+    <record id="view_purchase_subsidiary_journal_wizard_form" model="ir.ui.view">
+        <field name="name">purchase.subsidiary.journal.wizard.form</field>
+        <field name="model">purchase.subsidiary.journal.wizard</field>
+        <field name="arch" type="xml">
+
+            <form string="Purchase Subsidiary Journal">
+
+                <group>
+
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                    </group>
+
+                    <group>
+                        <field name="vendor_id"/>
+                        <field name="journal_id"/>
+                    </group>
+
+                </group>
+
+                <footer>
+
+                    <button
+                        name="action_generate"
+                        string="Generate"
+                        type="object"
+                        class="btn-primary"
+                    />
+
+                    <button
+                        string="Cancel"
+                        special="cancel"
+                        class="btn-secondary"
+                    />
+
+                </footer>
+
+            </form>
+
+        </field>
+
+    </record>
+
+
+    <!-- ========================================================= -->
+    <!-- Purchase Subsidiary Journal - Search                       -->
+    <!-- ========================================================= -->
+
+    <record id="view_purchase_subsidiary_journal_search" model="ir.ui.view">
+        <field name="name">purchase.subsidiary.journal.search</field>
+        <field name="model">account.move.line</field>
+        <field name="arch" type="xml">
+            <search string="Purchase Subsidiary Journal">
+                <field name="date"/>
+                <field name="move_id"/>
+                <field name="partner_id"/>
+                <field name="account_id"/>
+                <field name="name"/>
+                <field name="ref"/>
+                <field name="debit"/>
+                <field name="credit"/>
+            </search>
+        </field>
+    </record>
+
+
+    <!-- ========================================================= -->
+    <!-- Purchase Subsidiary Journal - Result List                 -->
+    <!-- ========================================================= -->
+
+    <record id="view_purchase_subsidiary_journal_result_list" model="ir.ui.view">
+        <field name="name">purchase.subsidiary.journal.result.list</field>
+        <field name="model">account.move.line</field>
+        <field name="arch" type="xml">
+
+            <list
+                string="Purchase Subsidiary Journal"
+                create="false"
+                edit="false"
+                delete="false"
+            >
+                <field name="date"/>
+                <field name="move_id"/>
+                <field name="partner_id"/>
+                <field name="account_id"/>
+                <field name="name"/>
+                <field name="ref"/>
+                <field name="debit" sum="Total Debit"/>
+                <field name="credit" sum="Total Credit"/>
+            </list>
+
+        </field>
+    </record>
+
+</odoo>

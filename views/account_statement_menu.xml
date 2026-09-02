@@ -58,4 +58,20 @@
             parent="account.menu_finance_reports"
             action="action_purchase_journal_wizard"
             sequence="121"/>
+
+  <!-- Purchase Subsidiary Journal Action -->
+  <record id="action_purchase_subsidiary_journal_wizard" model="ir.actions.act_window">
+    <field name="name">Purchase Subsidiary Journal</field>
+    <field name="res_model">purchase.subsidiary.journal.wizard</field>
+    <field name="view_mode">form</field>
+    <field name="target">new</field>
+  </record>
+
+  <!-- Purchase Subsidiary Journal Menu Item -->
+  <menuitem id="menu_purchase_subsidiary_journal"
+            name="Purchase Subsidiary Journal"
+            parent="account.menu_finance_reports"
+            action="action_purchase_subsidiary_journal_wizard"
+            sequence="122"/>
+
 </odoo>
