@@ -45,4 +45,23 @@
             action="action_purchase_subsidiary_journal_wizard"
             sequence="122"/>
 
+  <!-- Sales Journal Action -->
+  <record id="action_sales_journal_wizard" model="ir.actions.act_window">
+
+      <field name="name">Sales Journal</field>
+      <field name="res_model">sales.journal.wizard</field>
+      <field name="view_mode">form</field>
+      <field name="target">new</field>
+
+  </record>
+
+  <!-- Sales Journal Menu -->
+  <menuitem
+      id="menu_sales_journal"
+      name="Sales Journal"
+      parent="account.menu_finance_reports"
+      action="action_sales_journal_wizard"
+      sequence="123"
+  />
+
 </odoo>
