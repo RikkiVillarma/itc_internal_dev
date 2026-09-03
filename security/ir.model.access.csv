@@ -44,3 +44,4 @@ access_collection_receipt_user,collection.receipt.user,model_collection_receipt,
 access_purchase_journal_wizard_user,purchase.journal.wizard user,model_purchase_journal_wizard,base.group_user,1,1,1,1
 access_purchase_subsidiary_journal_wizard_user,purchase.subsidiary.journal.wizard user,model_purchase_subsidiary_journal_wizard,base.group_user,1,1,1,1
 access_sales_journal_wizard_user,sales.journal.wizard.user,model_sales_journal_wizard,base.group_user,1,1,1,1
+access_sales_subsidiary_journal_wizard_user,sales.subsidiary.journal.wizard.user,model_sales_subsidiary_journal_wizard,base.group_user,1,1,1,1

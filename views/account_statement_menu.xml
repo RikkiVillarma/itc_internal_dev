@@ -64,4 +64,21 @@
       sequence="123"
   />
 
+  <!-- Sales Subsidiary Journal Action -->
+  <record id="action_sales_subsidiary_journal_wizard" model="ir.actions.act_window">
+      <field name="name">Sales Subsidiary Journal</field>
+      <field name="res_model">sales.subsidiary.journal.wizard</field>
+      <field name="view_mode">form</field>
+      <field name="target">new</field>
+  </record>
+
+  <!-- Sales Subsidiary Journal Menu -->
+  <menuitem
+      id="menu_sales_subsidiary_journal"
+      name="Sales Subsidiary Journal"
+      parent="account.menu_finance_reports"
+      action="action_sales_subsidiary_journal_wizard"
+      sequence="124"
+  />
+
 </odoo>
