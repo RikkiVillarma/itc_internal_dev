@@ -14,4 +14,71 @@
             action="action_generate_all_due_statements"
             sequence="120"
             />
+
+  <!-- Purchase Journal Action -->
+  <record id="action_purchase_journal_wizard" model="ir.actions.act_window">
+    <field name="name">Purchase Journal</field>
+    <field name="res_model">purchase.journal.wizard</field>
+    <field name="view_mode">form</field>
+    <field name="target">new</field>
+  </record>
+
+  <!-- Purchase Journal Menu Item -->
+  <menuitem id="menu_purchase_journal"
+            name="Purchase Journal"
+            parent="account.menu_finance_reports"
+            action="action_purchase_journal_wizard"
+            sequence="121"/>
+
+  <!-- Purchase Subsidiary Journal Action -->
+  <record id="action_purchase_subsidiary_journal_wizard" model="ir.actions.act_window">
+    <field name="name">Purchase Subsidiary Journal</field>
+    <field name="res_model">purchase.subsidiary.journal.wizard</field>
+    <field name="view_mode">form</field>
+    <field name="target">new</field>
+  </record>
+
+  <!-- Purchase Subsidiary Journal Menu Item -->
+  <menuitem id="menu_purchase_subsidiary_journal"
+            name="Purchase Subsidiary Journal"
+            parent="account.menu_finance_reports"
+            action="action_purchase_subsidiary_journal_wizard"
+            sequence="122"/>
+
+  <!-- Sales Journal Action -->
+  <record id="action_sales_journal_wizard" model="ir.actions.act_window">
+
+      <field name="name">Sales Journal</field>
+      <field name="res_model">sales.journal.wizard</field>
+      <field name="view_mode">form</field>
+      <field name="target">new</field>
+
+  </record>
+
+  <!-- Sales Journal Menu -->
+  <menuitem
+      id="menu_sales_journal"
+      name="Sales Journal"
+      parent="account.menu_finance_reports"
+      action="action_sales_journal_wizard"
+      sequence="123"
+  />
+
+  <!-- Sales Subsidiary Journal Action -->
+  <record id="action_sales_subsidiary_journal_wizard" model="ir.actions.act_window">
+      <field name="name">Sales Subsidiary Journal</field>
+      <field name="res_model">sales.subsidiary.journal.wizard</field>
+      <field name="view_mode">form</field>
+      <field name="target">new</field>
+  </record>
+
+  <!-- Sales Subsidiary Journal Menu -->
+  <menuitem
+      id="menu_sales_subsidiary_journal"
+      name="Sales Subsidiary Journal"
+      parent="account.menu_finance_reports"
+      action="action_sales_subsidiary_journal_wizard"
+      sequence="124"
+  />
+
 </odoo>
