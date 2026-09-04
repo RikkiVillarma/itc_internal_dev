@@ -29,6 +29,15 @@
             <!-- Add after payment method -->
             <xpath expr="//field[@name='payment_type']" position="after">
                 <field name="expense_type" invisible="partner_type != 'supplier'" domain="[('can_be_expensed', '=', True)]"/>
+                <field name="wht_tax_ids" 
+                       widget="many2many_tags" 
+                       options="{'no_create': True}" 
+                       readonly="state != 'draft'"/>
+                
+                <field name="wht_amount" 
+                       readonly="1" 
+                       force_save="1" 
+                       invisible="wht_amount == 0"/>
             </xpath>
 
         </field>
