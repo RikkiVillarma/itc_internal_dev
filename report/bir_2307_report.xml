@@ -20,7 +20,7 @@
                         </div>
 
                         <!-- ============ PART I: PAYEE ============ -->
-                        <div style="position:absolute; top:255px; left:395px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
+                        <div style="position:absolute; top:255px; left:395px; font-size:15pt; z-index:1; letter-spacing:14px; white-space:nowrap;">
                             <t t-esc="o.partner_id.vat or ''"/>
                         </div>
                         <div style="position:absolute; top:308px; left:65px; font-size:11pt; z-index:1; white-space:nowrap;">
@@ -33,7 +33,7 @@
                             <t t-esc="o.partner_id.zip"/>
                         </div>
                         <!-- ============ PART II: PAYOR ============ -->
-                        <div style="position:absolute; top:465px; left:390px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
+                        <div style="position:absolute; top:465px; left:390px; font-size:15pt; z-index:1; letter-spacing:14px; white-space:nowrap;">
                             <t t-esc="line['corporation'].vat or '0000'"/>
                         </div>
 
@@ -62,33 +62,33 @@
                                         </div>
                                         <!--======================MONTH====================-->
                                         <t t-if="l['month'] in [1,4,7,10]">
-                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:350px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:417px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                                 <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
                                             </div>
                                         </t>
                                         <t t-if="l['month'] in [2,5,8,11]">
-                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:490px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:557px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                                 <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
                                             </div>
                                         </t>
                                         <t t-if="l['month'] in [3,6,9,12]">
-                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:625px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:692px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                                 <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
                                             </div>
                                         </t>
                                         <!--=================== TOTALS AND WHTAX COLUMN=================== -->
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:750px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:820px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                             <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
                                         </div>
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:860px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:980px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                             <t t-esc="'{:,.2f}'.format(l['tax_withheld'] or 0.00)"/>
                                         </div>
                                     </t>
                                 </t>
-                                <div style="position:absolute; top:915px; left:750px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                                <div style="position:absolute; top:915px; left:820px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
                                     <t t-esc="'{:,.2f}'.format(corp['gross_amount'])"/>
                                 </div>
-                                <div style="position:absolute; top:915px; left:860px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                                <div style="position:absolute; top:915px; left:980px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
                                     <t t-esc="'{:,.2f}'.format(corp['tax_withheld'])"/>
                                 </div>
                             </t>
@@ -106,33 +106,33 @@
                                     </div>
                                     <!-- ============================= MONTHS =========================================-->
                                     <t t-if="l['month'] in [1,4,7,10]">
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:350px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:417px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                             <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
                                         </div>
                                     </t>
                                     <t t-if="l['month'] in [2,5,8,11]">
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:490px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:557px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                             <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
                                         </div>
                                     </t>
                                     <t t-if="l['month'] in [3,6,9,12]">
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:625px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:692px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                             <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
                                         </div>
                                     </t>
-                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:750px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:820px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                         <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
                                     </div>
-                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:860px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:980px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
                                         <t t-esc="'{:,.2f}'.format(l['tax_withheld'] or 0.00)"/>
                                     </div>
                                 </t>
                             </t>
                             <!-- ===============================TOTALS II==================================== -->
-                            <div style="position:absolute; top:1225px; left:750px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                            <div style="position:absolute; top:1225px; left:820px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
                                 <t t-esc="'{:,.2f}'.format(corpII['gross_amount'])"/>
                             </div>
-                            <div style="position:absolute; top:1225px; left:860px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                            <div style="position:absolute; top:1225px; left:980px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
                                 <t t-esc="'{:,.2f}'.format(corpII['tax_withheld'])"/>
                             </div>
                         </t>

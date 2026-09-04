@@ -60,6 +60,7 @@
         'views/account_payment_view.xml',
         'views/purchase_order_lines_views.xml',
         'views/account_move_lines_views.xml',
+        'views/collection_receipt_views.xml',
         # Change Request modules
         #'views/account_payment_register_views.xml',
         #'views/cash_advance_views.xml',
