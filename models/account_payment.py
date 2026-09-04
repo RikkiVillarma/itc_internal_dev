@@ -87,7 +87,13 @@ class AccountPayment(models.Model):
                 total_invoice_amount = sum(invoices.mapped('amount_total'))
                 self.amount = max(0.0, total_invoice_amount - self.wht_amount)
             
-            
+
+    # ADD THIS MISSING METHOD
+    @api.depends('amount', 'wht_amount')
+    def _compute_payment_net_amount(self):
+        for payment in self:
+            payment.payment_net_amount = (payment.amount or 0.0) - (payment.wht_amount or 0.0)
+
     def get_2307_details(self):
         """Build the BIR 2307 certificate line(s) directly from the
         withholding tax breakdown captured at payment-registration time.
