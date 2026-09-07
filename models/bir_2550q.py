@@ -44,6 +44,7 @@ class Bir2550Q(models.Model):
     return_period_to   = fields.Date(string='Return Period To',   readonly=True)
     is_amended         = fields.Boolean(string='Amended Return?')
     is_short_period    = fields.Boolean(string='Short Period Return?')
+    rdo_code = fields.Char(string="RDO Code")
     taxpayer_classification = fields.Selection([
         ('micro', 'Micro'), ('small', 'Small'),
         ('medium', 'Medium'), ('large', 'Large'),
@@ -111,6 +112,77 @@ class Bir2550Q(models.Model):
     compromise_24   = fields.Monetary(string='24 Compromise')
     total_penalties = fields.Monetary(string='25 Total Penalties', compute='_compute_totals', store=True)
     total_amount_payable = fields.Monetary(string='26 Total Amount Payable/(Excess Credits)', compute='_compute_totals', store=True)
+    for_individuals = fields.Char(string='For Individuals Signature Name')
+    for_non_individuals = fields.Char(string='For Non-Individuals Signature Name')
+    tax_accreditation_no = fields.Char(string="Tax Agent Accreditation No. / Attorney's Roll No.")
+    date_of_issue = fields.Date(string='Date of Issue')
+    expirt_date = fields.Date(string='Expiration Date')
+
+    # ── Part III – Details of Payment ─────────────────────────────────────────
+
+    # Row 27 – Cash/Bank Debit Advice
+    cash_bank_drawee = fields.Char(string='Cash/Bank - Drawee Bank/Agency')
+    cash_bank_number = fields.Char(string='Cash/Bank - Number')
+    cash_bank_date = fields.Date(string='Cash/Bank - Date')
+    cash_bank_amount = fields.Monetary(string='Cash/Bank - Amount')
+
+    # Row 28 – Check
+    check_drawee = fields.Char(string='Check - Drawee Bank/Agency')
+    check_number = fields.Char(string='Check - Number')
+    check_date = fields.Date(string='Check - Date')
+    check_amount = fields.Monetary(string='Check - Amount')
+
+    # Row 29 – Tax Debit Memo
+    tdm_number = fields.Char(string='Tax Debit Memo - Number')
+    tdm_date = fields.Date(string='Tax Debit Memo - Date')
+    tdm_amount = fields.Monetary(string='Tax Debit Memo - Amount')
+
+    # Row 30 – Others
+    others_particulars = fields.Char(string='Others - Particulars')
+    others_drawee = fields.Char(string='Others - Drawee Bank/Agency')
+    others_number = fields.Char(string='Others - Number')
+    others_date = fields.Date(string='Others - Date')
+    others_amount = fields.Monetary(string='Others - Amount')
+    # ── Part III – Machine Validation / ROR Details ──────────────────────────
+    machine_validation_details = fields.Text(string='Machine Validation/ROR Details')
+    receiving_stamp_details = fields.Text(string='Stamp of Receiving Office/AAB')
+
+    # ── Part V – Schedule 1: Amortized Input Tax from Capital Goods ─
+
+    # Row 1
+    capital_goods_date_1 = fields.Date(string='Date Purchased/Imported')
+    capital_goods_source_1 = fields.Char(string='Source Code (D=Domestic, I=Importation)')
+    capital_goods_description_1 = fields.Char(string='Description')
+    capital_goods_amount_1 = fields.Monetary(string='Amount of Purchases/Importation of Capital Goods >P1M')
+    capital_goods_balance_1 = fields.Monetary(string='Balance of Input Tax from Previous Period')
+    capital_goods_estimated_life_1 = fields.Integer(string='Estimated Life (in months)')
+    capital_goods_recognized_life_1 = fields.Integer(string='Recognized Life (in Months) / Remaining Life')
+    capital_goods_allowable_1 = fields.Monetary(string='Allowable Input Tax for the Period (E÷G × months used)')
+    capital_goods_balance_cf_1 = fields.Monetary(string='Balance of Input Tax to be Carried to Next Period (E Less H)')
+
+    # Row 2
+    capital_goods_date_2 = fields.Date(string='Date Purchased/Imported - Row 2')
+    capital_goods_source_2 = fields.Char(string='Source Code - Row 2')
+    capital_goods_description_2 = fields.Char(string='Description - Row 2')
+    capital_goods_amount_2 = fields.Monetary(string='Amount of Purchases/Importation of Capital Goods >P1M - Row 2')
+    capital_goods_balance_2 = fields.Monetary(string='Balance of Input Tax from Previous Period - Row 2')
+    capital_goods_estimated_life_2 = fields.Integer(string='Estimated Life (in months) - Row 2')
+    capital_goods_recognized_life_2 = fields.Integer(string='Recognized Life (in Months) / Remaining Life - Row 2')
+    capital_goods_allowable_2 = fields.Monetary(string='Allowable Input Tax for the Period - Row 2')
+    capital_goods_balance_cf_2 = fields.Monetary(string='Balance of Input Tax to be Carried to Next Period - Row 2')
+
+    # ── Part V – Schedule 2: Input Tax Attributable to VAT Exempt Sales ─
+    input_tax_direct_exempt_51 = fields.Monetary(
+        string='Input Tax Directly Attributable to VAT Exempt Sales'
+    )
+
+    input_tax_ratable_157 = fields.Monetary(
+        string='Ratable Portion Calculation Result'
+    )
+
+    input_tax_exempt_sales_53 = fields.Monetary(
+        string='Total Input Tax Attributable to VAT Exempt Sales'
+    )
     
     
     
@@ -123,6 +195,38 @@ class Bir2550Q(models.Model):
                     "Year Ended must be in MM/YYYY format (e.g. 12/2024)."
                 )
 
+    # ── Part V – Schedule 3: Creditable VAT Withheld ──────────────
+    # Row 1
+    creditable_vat_period_1 = fields.Char(string='Period Covered - Row 1')
+    creditable_vat_agent_1 = fields.Char(string='Name of Withholding Agent - Row 1')
+    creditable_vat_income_1 = fields.Monetary(string='Income Payment - Row 1')
+    creditable_vat_withheld_1 = fields.Monetary(string='Total Tax Withheld - Row 1')
+
+    # Row 2
+    creditable_vat_period_2 = fields.Char(string='Period Covered - Row 2')
+    creditable_vat_agent_2 = fields.Char(string='Name of Withholding Agent - Row 2')
+    creditable_vat_income_2 = fields.Monetary(string='Income Payment - Row 2')
+    creditable_vat_withheld_2 = fields.Monetary(string='Total Tax Withheld - Row 2')
+
+    # Row 3
+    creditable_vat_period_3 = fields.Char(string='Period Covered - Row 3')
+    creditable_vat_agent_3 = fields.Char(string='Name of Withholding Agent - Row 3')
+    creditable_vat_income_3 = fields.Monetary(string='Income Payment - Row 3')
+    creditable_vat_withheld_3 = fields.Monetary(string='Total Tax Withheld - Row 3')
+    
+    # ── Part V – Schedule 4: Advance VAT Payment ──────────────────
+    # Row 1
+    advance_vat_period_1 = fields.Char(string='Period Covered - Row 1')
+    advance_vat_miller_1 = fields.Char(string='Name of Miller - Row 1')
+    advance_vat_taxpayer_1 = fields.Char(string='Name of Taxpayer - Row 1')
+    advance_vat_amount_1 = fields.Monetary(string='Amount Paid - Row 1')
+
+    # Row 2
+    advance_vat_period_2 = fields.Char(string='Period Covered - Row 2')
+    advance_vat_miller_2 = fields.Char(string='Name of Miller - Row 2')
+    advance_vat_taxpayer_2 = fields.Char(string='Name of Taxpayer - Row 2')
+    advance_vat_or_number_2 = fields.Char(string='Official Receipt Number - Row 2')
+    advance_vat_amount_2 = fields.Monetary(string='Amount Paid - Row 2')
     # ====================================================================
     # Sequence
     # ====================================================================
@@ -509,7 +613,7 @@ class Bir2550Q(models.Model):
             # Format: "NNN NNN NNN NNNNN" — spaces at sep positions align with pre-drawn "/"
             'Text4':  tin_fmt,
             # Text5  (x=549, y=839) → "8 RDO Code"
-            'Text5':  '',
+            'Text5':  self.rdo_code or '',
 
             # Text6  (x=25,  y=812) → "9 Taxpayer's Name / Registered Name"
             'Text6':  c.name or '',
@@ -580,62 +684,45 @@ class Bir2550Q(models.Model):
 
             # ── Signature Section ──────────────────────────────────────────
             # Text25 (x=26,  y=382) → Signature area – For Individual
-            'Text25': '',
+            'Text25':self.for_individuals or ' ',
             # Text26 (x=323, y=381) → Signature area – For Non-Individual
-            'Text26': '',
+            'Text26':self.for_non_individuals or ' ',
             # Text27 (x=148, y=325) → Tax Agent Accreditation No. / Attorney's Roll No.
-            'Text27': '',
+            'Text27': self.tax_accreditation_no or ' ',
             # Text80 (x=347, y=325) → Date of Issue (MM/DD/YYYY)
-            'Text80': '',
+            'Text80': self.date_of_issue.strftime('%m/%d/%Y') if self.date_of_issue else '',
             # Text81 (x=506, y=325) → Expiry Date (MM/DD/YYYY)
-            'Text81': '',
+            'Text81': self.expirt_date.strftime('%m/%d/%Y') if self.expirt_date else '',
 
             # ── Part III – Details of Payment ─────────────────────────────
+
             # Row 27 – Cash/Bank Debit Advice
-            # Text30 (x=107, y=270) → Row 27: Drawee Bank/Agency
-            'Text30': '',
-            # Text83 (x=178, y=270) → Row 27: Number
-            'Text83': '',
-            # Text86 (x=264, y=270) → Row 27: Date (MM/DD/YYYY)
-            'Text86': '',
-            # Text89 (x=376, y=270) → Row 27: Amount
-            'Text89': '',
+            'Text30': self.cash_bank_drawee or '',
+            'Text83': self.cash_bank_number or '',
+            'Text86': self.cash_bank_date.strftime('%m/%d/%Y') if self.cash_bank_date else '',
+            'Text89': amt(self.cash_bank_amount),
 
             # Row 28 – Check
-            # Text82 (x=107, y=254) → Row 28: Drawee Bank/Agency
-            'Text82': '',
-            # Text84 (x=178, y=254) → Row 28: Number
-            'Text84': '',
-            # Text87 (x=264, y=253) → Row 28: Date (MM/DD/YYYY)
-            'Text87': '',
-            # Text90 (x=377, y=254) → Row 28: Amount
-            'Text90': '',
+            'Text82': self.check_drawee or '',
+            'Text84': self.check_number or '',
+            'Text87': self.check_date.strftime('%m/%d/%Y') if self.check_date else '',
+            'Text90': amt(self.check_amount),
 
             # Row 29 – Tax Debit Memo
-            # Text85 (x=178, y=235) → Row 29: Number
-            'Text85': '',
-            # Text88 (x=264, y=236) → Row 29: Date (MM/DD/YYYY)
-            'Text88': '',
-            # Text91 (x=377, y=236) → Row 29: Amount
-            'Text91': '',
+            'Text85': self.tdm_number or '',
+            'Text88': self.tdm_date.strftime('%m/%d/%Y') if self.tdm_date else '',
+            'Text91': amt(self.tdm_amount),
 
             # Row 30 – Others (Specify below)
-            # Text97 (x=22,  y=208) → Row 30: Particulars / Description
-            'Text97': '',
-            # Text96 (x=107, y=208) → Row 30: Drawee Bank/Agency
-            'Text96': '',
-            # Text95 (x=178, y=208) → Row 30: Number
-            'Text95': '',
-            # Text94 (x=264, y=208) → Row 30: Date (MM/DD/YYYY)
-            'Text94': '',
-            # Text92 (x=378, y=208) → Row 30: Amount
-            'Text92': '',
+            'Text97': self.others_particulars or '',
+            'Text96': self.others_drawee or '',
+            'Text95': self.others_number or '',
+            'Text94': self.others_date.strftime('%m/%d/%Y') if self.others_date else '',
+            'Text92': amt(self.others_amount),
 
             # Machine Validation / Stamp areas
-            # Text37 (x=29,  y=177) → Machine Validation/ROR Details
-            'Text37': '',
-            # Text38 (x=382, y=166) → Stamp of Receiving Office/AAB
-            'Text38': '',
+            'Text37': self.machine_validation_details or '',
+            'Text38': self.receiving_stamp_details or '',
 
             # ==============================================================
             # PAGE 2
@@ -657,10 +744,10 @@ class Bir2550Q(models.Model):
             'Text100': amt(self.output_tax_31b),
 
             # Text99  (x=163, y=860) → "32 Zero-Rated Sales" (A col only, no output tax)
-            'Text99':  amt(self.zero_rated_sales),
+            'Text99': amt(self.zero_rated_sales) if self.zero_rated_sales else '0.00',
 
             # Text102 (x=163, y=844) → "33 Exempt Sales" (A col only)
-            'Text102': amt(self.exempt_sales),
+            'Text102': amt(self.exempt_sales) if self.exempt_sales else '0.00',
 
             # Text101 (x=163, y=828) → "34A Total Sales (Sum 31A–33A)"
             'Text101': amt(self.total_sales_34a),
@@ -668,10 +755,10 @@ class Bir2550Q(models.Model):
             'Text103': amt(self.total_output_34b),
 
             # Text104 (x=376, y=810) → "35 Less: Output VAT on Uncollected Receivables" (B col)
-            'Text104': amt(self.output_vat_uncollected_35),
+            'Text104': amt(self.output_vat_uncollected_35) if self.output_vat_uncollected_35 else '0.00',
 
             # Text105 (x=376, y=795) → "36 Add: Output VAT on Recovered Uncollected Receivables" (B col)
-            'Text105': amt(self.output_vat_recovered_36),
+            'Text105': amt(self.output_vat_recovered_36) if self.output_vat_recovered_36 else '0.00',
 
             # Text106 (x=376, y=779) → "37 Total Adjusted Output Tax Due (34B - 35 + 36)"
             'Text106': amt(self.total_adjusted_output_tax),
@@ -747,87 +834,97 @@ class Bir2550Q(models.Model):
             # Text135 (x=376, y=356) → "61 Net VAT Payable/(Excess Input Tax) (37B Less 60B) → Part II Item 15"
             'Text135': amt(self.net_vat_payable),
 
+
             # ── Part V – Schedule 1: Amortized Input Tax from Capital Goods ─
             # Row 1 (y=280):
             # Text136 (x=23)  → (A) Date Purchased/Imported (MM/DD/YYYY)
-            'Text136': '',
+            'Text136': self.capital_goods_date_1.strftime('%m/%d/%Y') if self.capital_goods_date_1 else '',
+
             # Text138 (x=79)  → (B) Source Code (D=Domestic, I=Importation)
-            'Text138': '',
+            'Text138': self.capital_goods_source_1 or '',
+
             # Text140 (x=112) → (C) Description
-            'Text140': '',
+            'Text140': self.capital_goods_description_1 or '',
+
             # Text142 (x=187) → (D) Amount of Purchases/Importation of Capital Goods >P1M
-            'Text142': '',
+            'Text142': amt(self.capital_goods_amount_1),
+
             # Text144 (x=269) → (E) Balance of Input Tax from Previous Period
-            'Text144': '',
+            'Text144': amt(self.capital_goods_balance_1),
+
             # Text147 (x=337) → (F) Estimated Life (in months)
-            'Text147': '',
+            'Text147': str(self.capital_goods_estimated_life_1 or ''),
+
             # Text149 (x=391) → (G) Recognized Life (in Months) / Remaining Life
-            'Text149': '',
+            'Text149': str(self.capital_goods_recognized_life_1 or ''),
+
             # Text151 (x=449) → (H) Allowable Input Tax for the Period (E÷G × months used)
-            'Text151': '',
+            'Text151': amt(self.capital_goods_allowable_1),
+
             # Text153 (x=518) → (I) Balance of Input Tax to be Carried to Next Period (E Less H)
-            'Text153': '',
+            'Text153': amt(self.capital_goods_balance_cf_1),
+
 
             # Row 2 (y=272):
             # Text137 (x=23)  → (A) Date
-            'Text137': '',
+            'Text137': self.capital_goods_date_2.strftime('%m/%d/%Y') if self.capital_goods_date_2 else '',
             # Text139 (x=79)  → (B) Source Code
-            'Text139': '',
+            'Text139': self.capital_goods_source_2 or '',
             # Text141 (x=112) → (C) Description
-            'Text141': '',
+            'Text141': self.capital_goods_description_2 or '',
             # Text143 (x=187) → (D) Amount
-            'Text143': '',
+            'Text143': amt(self.capital_goods_amount_2),
             # Text145 (x=269) → (E) Balance of Input Tax
-            'Text145': '',
+            'Text145': amt(self.capital_goods_balance_2),
             # Text148 (x=337) → (F) Estimated Life
-            'Text148': '',
+            'Text148': str(self.capital_goods_estimated_life_2 or ''),
             # Text150 (x=391) → (G) Recognized Life
-            'Text150': '',
+            'Text150': str(self.capital_goods_recognized_life_2 or ''),
             # Text152 (x=449) → (H) Allowable Input Tax
-            'Text152': '',
+            'Text152': amt(self.capital_goods_allowable_2),
             # Text154 (x=519) → (I) Balance to Carry Forward
-            'Text154': '',
+            'Text154': amt(self.capital_goods_balance_cf_2),
 
             # Total row:
             # Text146 (x=269, y=264) → Total Column E → feeds Part IV Item 39B
-            'Text146': '',
+            'Text146': amt((self.capital_goods_balance_1 or 0) + (self.capital_goods_balance_2 or 0)),
             # Text155 (x=518, y=263) → Total Column I → feeds Part IV Item 52B
-            'Text155': '',
+            'Text155': amt((self.capital_goods_balance_cf_1 or 0) + (self.capital_goods_balance_cf_2 or 0)),
 
             # ── Part V – Schedule 2: Input Tax Attributable to VAT Exempt Sales ─
             # Text51  (x=449, y=234) → Input Tax directly attributable to VAT Exempt Sale
-            'Text51':  '',
+            'Text51': amt(self.input_tax_direct_exempt_51),
             # Text157 (x=449, y=225) → Ratable portion calculation result
-            'Text157': '',
+            'Text157': amt(self.input_tax_ratable_157),
             # Text156 (x=449, y=196) → Total Input Tax attributable to Exempt Sale → Part IV Item 53
-            'Text156': '',
+            'Text156': amt(self.input_tax_exempt_sales_53),
 
             # ── Part V – Schedule 3: Creditable VAT Withheld ──────────────
             # Row 1 (y=165):
             # Text158 (x=23)  → (A) Period Covered
-            'Text158': '',
+            'Text158': self.creditable_vat_period_1 or '',
             # Text159 (x=108) → (B) Name of Withholding Agent
-            'Text159': '',
+            'Text159': self.creditable_vat_agent_1 or '',
             # Text162 (x=390) → (C) Income Payment
-            'Text162': '',
+            'Text162': amt(self.creditable_vat_income_1),
             # Text164 (x=503) → (D) Total Tax Withheld
-            'Text164': '',
+            'Text164': amt(self.creditable_vat_withheld_1),
 
             # Row 2 (y=156):
             # Text160 (x=23)  → (A) Period Covered
-            'Text160': '',
+            'Text160': self.creditable_vat_period_2 or '',
             # Text161 (x=108) → (B) Name of Withholding Agent
-            'Text161': '',
+            'Text161': self.creditable_vat_agent_2 or '',
             # Text163 (x=390) → (C) Income Payment
-            'Text163': '',
+            'Text163': amt(self.creditable_vat_income_2),
             # Text174 (x=502) → (D) Total Tax Withheld
-            'Text174': '',
+            'Text174': amt(self.creditable_vat_withheld_2),
 
             # Row 3 (y=147):
             # Text173 (x=390) → (C) Income Payment
-            'Text173': '',
+            'Text173': amt(self.creditable_vat_income_3),
             # Text175 (x=502) → (D) Total Tax Withheld
-            'Text175': '',
+            'Text175': amt(self.creditable_vat_withheld_3),
 
             # Text165 (x=390, y=118) → Total Column D → feeds Part II Item 16
             'Text165': amt(self.creditable_vat_withheld),
@@ -835,25 +932,25 @@ class Bir2550Q(models.Model):
             # ── Part V – Schedule 4: Advance VAT Payment ──────────────────
             # Row 1 (y=118):
             # Text171 (x=23)  → (A) Period Covered
-            'Text171': '',
+            'Text171': self.advance_vat_period_1 or '',
             # Text169 (x=108) → (B) Name of Miller
-            'Text169': '',
+            'Text169': self.advance_vat_miller_1 or '',
             # Text167 (x=255) → (C) Name of Taxpayer
-            'Text167': '',
+            'Text167': self.advance_vat_taxpayer_1 or '',
             # Text176 (x=503) → (E) Amount Paid
-            'Text176': '',
+            'Text176': amt(self.advance_vat_amount_1),
 
             # Row 2 (y=108):
             # Text172 (x=23)  → (A) Period Covered
-            'Text172': '',
+            'Text172': self.advance_vat_period_2 or '',
             # Text170 (x=108) → (B) Name of Miller
-            'Text170': '',
+            'Text170': self.advance_vat_miller_2 or '',
             # Text168 (x=255) → (C) Name of Taxpayer
-            'Text168': '',
+            'Text168': self.advance_vat_taxpayer_2 or '',
             # Text166 (x=390) → (D) Official Receipt Number
-            'Text166': '',
+            'Text166': self.advance_vat_or_number_2 or '',
             # Text177 (x=503) → (E) Amount Paid row 2
-            'Text177': '',
+            'Text177': amt(self.advance_vat_amount_2),
 
             # Text178 (x=503, y=99) → Total Amount → feeds Part II Item 17
             'Text178': amt(self.advance_vat_payments),
