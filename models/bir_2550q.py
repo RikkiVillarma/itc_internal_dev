@@ -1,9 +1,11 @@
+import re
 from odoo import models, fields, api, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from datetime import datetime
 import base64
 import io
 import os
+
 
 
 class Bir2550Q(models.Model):
@@ -181,6 +183,17 @@ class Bir2550Q(models.Model):
     input_tax_exempt_sales_53 = fields.Monetary(
         string='Total Input Tax Attributable to VAT Exempt Sales'
     )
+    
+    
+    
+    @api.constrains('year_ended')
+    def _check_year_ended_format(self):
+        pattern = re.compile(r'^(0[1-9]|1[0-2])/\d{4}$')
+        for record in self:
+            if record.year_ended and not pattern.match(record.year_ended):
+                raise ValidationError(
+                    "Year Ended must be in MM/YYYY format (e.g. 12/2024)."
+                )
 
     # ── Part V – Schedule 3: Creditable VAT Withheld ──────────────
     # Row 1
