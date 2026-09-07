@@ -5,11 +5,11 @@
         <field name="inherit_id" ref="account.view_account_payment_form"/>
         <field name="arch" type="xml">
             <xpath expr="//header" position="inside">
-                   <!--  <button name="%(action_report_custom_acknowledgement_receipt)d"
+                    <button name="%(action_report_custom_acknowledgement_receipt)d"
                             string="Print Acknowledgement"
                             type="action"
                             class="oe_highlight"
-                            invisible="partner_type != 'customer'"/> -->
+                            invisible="partner_type != 'customer'"/>
                     <button name="%(action_report_custom_official_receipt)d"
                             string="Print Collection Receipt"
                             type="action"
