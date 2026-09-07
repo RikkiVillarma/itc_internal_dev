@@ -2,11 +2,22 @@
 <odoo>
   <!-- QWeb Template: Acknowledgement Receipt — model: account.move -->
   <template id="report_custom_acknowledgement_receipt_template">
-    <t t-call="web.external_layout">
-      <t t-foreach="docs" t-as="doc">
-        <div class="page" style="font-family: Arial, sans-serif; font-size: 14px; line-height:1.4;">
+    <t t-call="web.internal_layout">
+    <t t-foreach="docs" t-as="payment">
+      <t t-set="moves" t-value="payment.reconciled_invoice_ids"/>
+      <t t-foreach="moves" t-as="doc">
+        <div class="page" style="font-family: Arial, sans-serif; font-size: 14px; line-height:1.4; padding-top: 0;">
           <main>
-
+            <!-- Company Letterhead -->
+            <div style="text-align:center; margin-bottom:15px;">
+              <strong style="font-size:20px;">INNOVATHINK CORPORATION</strong><br/>
+              <span style="font-size:16px;">
+                Lot 1A Colours Town Center Alabang Zapote Road corner Marcos Alvarez Avenue<br/>
+                Talon Uno 1740 City of Las Pinas NCR Fourth District Philippines<br/>
+                VAT REG TIN: 008-168-070-00000<br/>
+                Telephone No.: 8840-4821
+              </span>
+            </div>
             <!-- Receipt Header -->
             <table style="width:100%; margin-bottom:15px; font-size:13px; border-collapse:collapse;">
               <tr>
@@ -297,17 +308,18 @@
         </div>
       </t>
     </t>
+  </t>
   </template>
 
   <!-- Report action bound to account.move (out_invoice) -->
-  <record id="action_report_custom_acknowledgement_receipt" model="ir.actions.report">
+<record id="action_report_custom_acknowledgement_receipt" model="ir.actions.report">
     <field name="name">Acknowledgment Receipt</field>
-    <field name="model">account.move</field>
+    <field name="model">account.payment</field>
     <field name="report_type">qweb-pdf</field>
     <field name="report_name">itc_internal_dev.report_custom_acknowledgement_receipt_template</field>
     <field name="print_report_name">'Acknowledgment Receipt - %s' % (object.name)</field>
-    <field name="binding_model_id" ref="account.model_account_move"/>
+    <field name="binding_model_id" ref="account.model_account_payment"/>
     <field name="binding_type">report</field>
-  </record>
+</record>
 
 </odoo>
