@@ -835,7 +835,81 @@ SQL_QUERIES = {
             ON aa.id = aml.account_id
         WHERE am.state = 'posted'
         ORDER BY aa.id, aml.id;
-        """
+        """,
+        'sawt': """
+        WITH params AS (
+            SELECT %s::date AS date_from, %s::date AS date_to
+        )
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ NO",
+            rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
+            rp.name AS "REGISTERED NAME",
+            p.date_from AS "RETURN PERIOD FROM",
+            p.date_to AS "RETURN PERIOD TO",
+            UPPER(SUBSTRING(at.name->>'en_US' FROM 'W[CI][0-9]+')) AS "ATC CODE",
+            '' AS "NATURE OF INCOME PAYMENT",
+            SUM(aml.tax_base_amount) AS "AMOUNT",
+            CONCAT(ABS(at.amount), '%%') AS "TAX RATE",
+            SUM(aml.credit - aml.debit) AS "TAX WITHHELD"
+        FROM account_move_line aml
+        JOIN account_move am ON am.id = aml.move_id
+        JOIN account_tax at ON aml.tax_line_id = at.id
+        JOIN res_partner rp ON am.partner_id = rp.id
+        CROSS JOIN params p
+        WHERE am.move_type IN ('out_invoice', 'out_refund')
+        AND am.state = 'posted'
+        AND at.type_tax_use = 'sale'
+        AND at.amount < 0
+        AND am.invoice_date BETWEEN p.date_from AND p.date_to
+        GROUP BY rp.name, rp.vat, at.name, at.amount, p.date_from, p.date_to
+        ORDER BY rp.name;
+    """,
+    'qap_summary': """
+        WITH params AS (
+            SELECT %s::date AS date_from, %s::date AS date_to
+        ),
+        bounds AS (
+            SELECT
+                date_from, date_to,
+                date_from AS m1_start,
+                (date_from + INTERVAL '1 month' - INTERVAL '1 day')::date AS m1_end,
+                (date_from + INTERVAL '1 month')::date AS m2_start,
+                (date_from + INTERVAL '2 month' - INTERVAL '1 day')::date AS m2_end,
+                (date_from + INTERVAL '2 month')::date AS m3_start,
+                date_to AS m3_end
+            FROM params
+        )
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ",
+            rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
+            CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "CORPORATION",
+            CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "INDIVIDUAL",
+            UPPER(SUBSTRING(at.name->>'en_US' FROM 'W[CI][0-9]+')) AS "ATC CODE",
+            '' AS "NATURE OF PAYMENT",
+            SUM(CASE WHEN am.invoice_date BETWEEN b.m1_start AND b.m1_end THEN aml.tax_base_amount ELSE 0 END) AS "AMOUNT OF INCOME PAYMENT M1",
+            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m1_start AND b.m1_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount) END AS "TAX RATE M1",
+            SUM(CASE WHEN am.invoice_date BETWEEN b.m1_start AND b.m1_end THEN ABS(aml.credit - aml.debit) ELSE 0 END) AS "TAX WITHHELD M1",
+            SUM(CASE WHEN am.invoice_date BETWEEN b.m2_start AND b.m2_end THEN aml.tax_base_amount ELSE 0 END) AS "AMOUNT OF INCOME PAYMENT M2",
+            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m2_start AND b.m2_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount) END AS "TAX RATE M2",
+            SUM(CASE WHEN am.invoice_date BETWEEN b.m2_start AND b.m2_end THEN ABS(aml.credit - aml.debit) ELSE 0 END) AS "TAX WITHHELD M2",
+            SUM(CASE WHEN am.invoice_date BETWEEN b.m3_start AND b.m3_end THEN aml.tax_base_amount ELSE 0 END) AS "AMOUNT OF INCOME PAYMENT M3",
+            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m3_start AND b.m3_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount) END AS "TAX RATE M3",
+            SUM(CASE WHEN am.invoice_date BETWEEN b.m3_start AND b.m3_end THEN ABS(aml.credit - aml.debit) ELSE 0 END) AS "TAX WITHHELD M3",
+            SUM(aml.tax_base_amount) AS "TOTAL INCOME PAYMENT",
+            SUM(ABS(aml.credit - aml.debit)) AS "TOTAL TAX WITHHELD"
+        FROM account_move_line aml
+        JOIN account_move am ON am.id = aml.move_id
+        JOIN account_tax at ON aml.tax_line_id = at.id
+        JOIN res_partner rp ON am.partner_id = rp.id
+        CROSS JOIN bounds b
+        WHERE am.move_type IN ('in_invoice', 'in_refund')
+        AND am.state = 'posted'
+        AND at.type_tax_use = 'purchase'
+        AND at.amount < 0
+        AND am.invoice_date BETWEEN b.date_from AND b.date_to
+        GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.amount
+        ORDER BY rp.name;
+    """,
 }
 
 """ Start of the class """
