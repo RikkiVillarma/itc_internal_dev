@@ -37,6 +37,12 @@
                             type="object"
                             class="oe_highlight"
                             invisible="move_type == 'out_invoice'"/>
+
+                    <button name="%(itc_internal_dev.action_report_credit_memo_custom)d"
+                            type="action"
+                            string="Print Credit Memo"
+                            class="btn-secondary"
+                            invisible="move_type != 'out_refund'"/>
                     
                 </xpath>
 

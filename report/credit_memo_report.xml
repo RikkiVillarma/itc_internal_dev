@@ -7,15 +7,34 @@
     <div class="page" style="font-family: Arial, sans-serif; font-size: 13px; padding: 20px;">
     <main>
 
-      <!-- HEADER (Company header handled by external_layout) -->
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:25px;">
-        <div></div>
         <!-- CREDIT MEMO TITLE UPPER RIGHT -->
         <div style="text-align:right;">
           <p style="font-size:24px; font-weight:bold; margin:0;">CREDIT MEMO</p>
           <p style="font-size:16px; margin:3px 0 0 0;">CM-<t t-esc="o.name"/></p>
         </div>
+      <!-- HEADER (Company header handled by external_layout) -->
+      <div style="text-align:left; margin-bottom:40px;">
+        <p style="font-size:20px; font-weight:bold; margin:0;">
+          <t t-esc="o.company_id.name"/>
+        </p>
+        <p style="font-size:16px; margin:2px 0 0 0;">
+          Lot 1A Colours Town Center Alabang Zapote Road corner Marcos Alvarez Avenue
+        </p>
+        <p style="font-size:16px; margin:0;">
+          Talon Uno 1740 City of Las Pinas NCR Fourth District Philippines.
+        </p>
+        <p style="font-size:16px; margin:2px 0 0 0;">
+          VAT REG TIN: <t t-esc="o.company_id.vat or ''"/>
+        </p>
+        <p style="font-size:16px; margin:2px 0 0 0;">
+          Telephone No.: <t t-esc="o.company_id.phone or ''"/>
+        </p>
+        <p style="font-size:16px; margin:2px 0 0 0;">
+          Business Style: <t t-esc="o.company_id.name"/>
+        </p>
       </div>
+
+      
 
       <!-- CUSTOMER BLOCK -->
       <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px;">
