@@ -486,7 +486,7 @@ class Bir2550Q(models.Model):
 
     def _fmt_amt(self, value):
         if not value:
-            return ''
+            return '0.00'
         return f'{value:,.2f}'
 
     def _format_tin_for_pdf(self, tin_raw):
@@ -505,8 +505,19 @@ class Bir2550Q(models.Model):
         seg2 = digits[3:6]    # 3 digits before second /
         seg3 = digits[6:9]    # 3 digits before third /
         seg4 = digits[9:]     # branch code (up to 5 digits)
-        return f'{seg1} {seg2} {seg3} {seg4}'
+        return f" {'    '.join(seg1)}        {'    '.join(seg2)}        {'    '.join(seg3)}        {'    '.join(seg4)}"
 
+    def _format_tin_for_pdf_p2(self, tin_raw):
+        """
+        This format is for TIN PAGE 2 of the 2550Q PDF field.
+        """
+        digits = (tin_raw or '').replace('-', '').replace(' ', '').replace('/', '')
+
+        seg1 = digits[0:3]
+        seg2 = digits[3:6]
+        seg3 = digits[6:9]
+
+        return f"  {'   '.join(seg1)}     {'   '.join(seg2)}    {'   '.join(seg3)}"
     def _format_date_for_pdf(self, d):
         """
         Format a Date for MM/DD/YYYY box fields (Text2, Text3).
@@ -523,7 +534,8 @@ class Bir2550Q(models.Model):
                 d = datetime.strptime(d, '%Y-%m-%d').date()
             except ValueError:
                 return ''
-        return d.strftime('%m%d%Y')   # "01312026" — slashes are pre-drawn
+        formatted = d.strftime('%m%d%Y')
+        return '  ' + ('    '.join(formatted[:2])+'   '+ '    '.join(formatted[2:4])+'   '+'    '.join(formatted[4:])) # "01312026" — slashes are pre-drawn
 
     def _format_year_for_pdf(self, year_ended):
         """
@@ -532,7 +544,21 @@ class Bir2550Q(models.Model):
         6 cells → 'MMYYYY'
         Tc = 85.4 / 6 - 9.23 = 5.00 (set in SPACED_FIELDS)
         """
-        return (year_ended or '').replace('/', '').replace(' ', '')
+        return ' ' + '    '.join((year_ended or '').replace('/', ''))
+    
+    def _format_number_for_pdf(self, value):
+        return '    '.join(str(value or '')) + ' '
+    
+    def _format_contact_for_pdf(self, phone):
+        digits = (phone or '').replace('-', '').replace(' ', '').replace('(', '').replace(')', '')
+
+        return (
+            '   '.join(digits[:3])
+            + '     '
+            + '   '.join(digits[3:6])
+            + '     '
+            + '   '.join(digits[6:])
+        ) + '  '
 
     # ====================================================================
     # PDF field map  (verified against 2550Q April 2024 ENCS)
@@ -548,10 +574,27 @@ class Bir2550Q(models.Model):
         # Output "NNN NNN NNN NNNNN" (17 chars), Tc set in SPACED_FIELDS.
         # ------------------------------------------------------------------
         tin_fmt = self._format_tin_for_pdf(c.vat or '')
-        tin_p2  = tin_fmt   # same string, different Tc for narrower p2 field
 
         def amt(f):
-            return self._fmt_amt(f)
+            value = self._fmt_amt(f).replace(',', '').replace('.', ' ')
+
+            decimal = value[-3:]       # 00
+            units = value[-6:-3]       # 000
+            thousand = value[-9:-6]    # 000
+            million = value[-12:-9]    # 000
+            billion = value[:-12]      # 100
+
+            return (
+                '    '.join(billion)
+                + '  '
+                + '    '.join(million)
+                + '   '
+                + '    '.join(thousand)
+                + '   '
+                + '    '.join(units)
+                + '   '
+                + '    '.join(decimal)
+            ) + '  '
 
         # ------------------------------------------------------------------
         # Helper: mark a checkbox with 'X' (True) or leave blank (False)
@@ -572,19 +615,19 @@ class Bir2550Q(models.Model):
             'Text1':  self._format_year_for_pdf(self.year_ended),
 
             # Text7  (x=74,  y=899) → Calendar checkbox (always Calendar for now)
-            'Text7':  'X',
+            'Text7':  ' ' + 'X',
             # Text12 (x=141, y=899) → Fiscal checkbox
             'Text12': '',
 
             # Quarter checkboxes — only one is 'X'
             # Text13 (x=434, y=899) → 1st Quarter
-            'Text13': chk(self.quarter == '1'),
+            'Text13': ' ' + chk(self.quarter == '1'),
             # Text14 (x=472, y=899) → 2nd Quarter
-            'Text14': chk(self.quarter == '2'),
+            'Text14': ' ' + chk(self.quarter == '2'),
             # Text15 (x=511, y=899) → 3rd Quarter
-            'Text15': chk(self.quarter == '3'),
+            'Text15': ' ' + chk(self.quarter == '3'),
             # Text16 (x=554, y=899) → 4th Quarter
-            'Text16': chk(self.quarter == '4'),
+            'Text16': ' ' + chk(self.quarter == '4'),
 
             # ── Row 2 – Return Period + Amended + Short Period ─────────────
             # Text2  (x=64, y=872, w=112.9) → "4 Return Period From (MM/DD/YYYY)"
@@ -599,21 +642,21 @@ class Bir2550Q(models.Model):
             #   346 → 390 → 477 → 533
             # Item 5 "Amended Return?" occupies the LEFT half (x≈346–404):
             # Text22 (x=346, y=870) → "5 Amended Return? – Yes" checkbox
-            'Text22': chk(self.is_amended),
+            'Text22': ' ' + chk(self.is_amended),
             # Text21 (x=390, y=870) → "5 Amended Return? – No" checkbox
-            'Text21': chk(not self.is_amended),
+            'Text21': ' ' + chk(not self.is_amended),
             # Item 6 "Short Period Return?" occupies the RIGHT half (x≈477–533):
             # Text20 (x=477, y=870) → "6 Short Period Return? – Yes" checkbox
-            'Text20': chk(self.is_short_period),
+            'Text20': ' ' + chk(self.is_short_period),
             # Text17 (x=533, y=871) → "6 Short Period Return? – No" checkbox
-            'Text17': chk(not self.is_short_period),
+            'Text17': ' ' + chk(not self.is_short_period),
 
             # ── Part I – Background Information ───────────────────────────
             # Text4  (x=234, y=840, w=241.2) → "7 Taxpayer Identification Number (TIN)"
             # Format: "NNN NNN NNN NNNNN" — spaces at sep positions align with pre-drawn "/"
             'Text4':  tin_fmt,
             # Text5  (x=549, y=839) → "8 RDO Code"
-            'Text5':  self.rdo_code or '',
+            'Text5':  ' ' + '    '.join(self.rdo_code or ''),
 
             # Text6  (x=25,  y=812) → "9 Taxpayer's Name / Registered Name"
             'Text6':  c.name or '',
@@ -627,28 +670,28 @@ class Bir2550Q(models.Model):
             # Text8  (x=27,  y=765) → City, State portion of address
             'Text8':  (c.city or '') + (f', {c.state_id.name}' if c.state_id else ''),
             # Text19 (x=537, y=764) → "10A ZIP Code"
-            'Text19': c.zip or '',
+            'Text19': '    '.join(c.zip or ''),
 
             # Text9  (x=27,  y=736) → "11 Contact Number (Landline/Cellphone)"
-            'Text9':  c.phone or '',
+            'Text9':  self._format_contact_for_pdf(c.phone),
             # Text10 (x=211, y=736) → "12 Email Address"
             'Text10': c.email or '',
 
             # Taxpayer Classification checkboxes (Item 13)
             # Text23 (x=162, y=716) → Micro
-            'Text23': chk(self.taxpayer_classification == 'micro'),
+            'Text23': ' ' + chk(self.taxpayer_classification == 'micro'),
             # Text24 (x=232, y=716) → Small
-            'Text24': chk(self.taxpayer_classification == 'small'),
+            'Text24': ' ' + chk(self.taxpayer_classification == 'small'),
             # Text28 (x=302, y=716) → Medium
-            'Text28': chk(self.taxpayer_classification == 'medium'),
+            'Text28': ' ' +  chk(self.taxpayer_classification == 'medium'),
             # Text29 (x=390, y=716) → Large
-            'Text29': chk(self.taxpayer_classification == 'large'),
+            'Text29': ' ' + chk(self.taxpayer_classification == 'large'),
 
             # Tax Relief (Item 14)
             # Text32 (x=191, y=695) → "14 Tax Relief? – Yes" checkbox
-            'Text32': chk(self.is_tax_relief),
+            'Text32': ' ' + chk(self.is_tax_relief),
             # Text33 (x=234, y=695) → "14 Tax Relief? – No" checkbox
-            'Text33': chk(not self.is_tax_relief),
+            'Text33': ' ' + chk(not self.is_tax_relief),
             # Text18 (x=367, y=698) → "14A If yes, specify"
             'Text18': self.tax_relief_specify or '',
 
@@ -688,36 +731,36 @@ class Bir2550Q(models.Model):
             # Text26 (x=323, y=381) → Signature area – For Non-Individual
             'Text26':self.for_non_individuals or ' ',
             # Text27 (x=148, y=325) → Tax Agent Accreditation No. / Attorney's Roll No.
-            'Text27': self.tax_accreditation_no or ' ',
+            'Text27': ' ' + self.tax_accreditation_no or ' ',
             # Text80 (x=347, y=325) → Date of Issue (MM/DD/YYYY)
-            'Text80': self.date_of_issue.strftime('%m/%d/%Y') if self.date_of_issue else '',
+            'Text80': ' ' + self.date_of_issue.strftime('%m/%d/%Y') if self.date_of_issue else '',
             # Text81 (x=506, y=325) → Expiry Date (MM/DD/YYYY)
-            'Text81': self.expirt_date.strftime('%m/%d/%Y') if self.expirt_date else '',
+            'Text81': ' ' + self.expirt_date.strftime('%m/%d/%Y') if self.expirt_date else '',
 
             # ── Part III – Details of Payment ─────────────────────────────
 
             # Row 27 – Cash/Bank Debit Advice
-            'Text30': self.cash_bank_drawee or '',
-            'Text83': self.cash_bank_number or '',
-            'Text86': self.cash_bank_date.strftime('%m/%d/%Y') if self.cash_bank_date else '',
+            'Text30': ' ' + self.cash_bank_drawee or '',
+            'Text83': self._format_number_for_pdf(self.cash_bank_number),
+            'Text86': self._format_date_for_pdf(self.cash_bank_date),
             'Text89': amt(self.cash_bank_amount),
 
             # Row 28 – Check
-            'Text82': self.check_drawee or '',
-            'Text84': self.check_number or '',
-            'Text87': self.check_date.strftime('%m/%d/%Y') if self.check_date else '',
+            'Text82': ' ' + self.check_drawee or '',
+            'Text84': self._format_number_for_pdf(self.check_number),
+            'Text87': self._format_date_for_pdf(self.check_date),
             'Text90': amt(self.check_amount),
 
             # Row 29 – Tax Debit Memo
-            'Text85': self.tdm_number or '',
-            'Text88': self.tdm_date.strftime('%m/%d/%Y') if self.tdm_date else '',
+            'Text85': self._format_number_for_pdf(self.tdm_number),
+            'Text88': self._format_date_for_pdf(self.tdm_date) if self.tdm_date else '',
             'Text91': amt(self.tdm_amount),
 
             # Row 30 – Others (Specify below)
-            'Text97': self.others_particulars or '',
-            'Text96': self.others_drawee or '',
-            'Text95': self.others_number or '',
-            'Text94': self.others_date.strftime('%m/%d/%Y') if self.others_date else '',
+            'Text97': ' ' + self.others_particulars or '',
+            'Text96': ' ' + self.others_drawee or '',
+            'Text95': self._format_number_for_pdf(self.others_number),
+            'Text94': self._format_date_for_pdf(self.others_date) if self.others_date else '',
             'Text92': amt(self.others_amount),
 
             # Machine Validation / Stamp areas
@@ -731,9 +774,9 @@ class Bir2550Q(models.Model):
             # ── Page 2 Header ──────────────────────────────────────────────
             # Text39 (x=23, y=918, w=197.4) → TIN repeated on page 2
             # Same format as Text4; Tc=1.74 set in SPACED_FIELDS
-            'Text39': tin_p2,
+            'Text39': self._format_tin_for_pdf_p2(tin_fmt),
             # Text98 (x=219, y=918) → Taxpayer's Last/Registered Name (page 2)
-            'Text98': c.name or '',
+            'Text98': ' ' + c.name or '',
 
             # ── Part IV – Details of VAT Computation ──────────────────────
 
@@ -744,10 +787,10 @@ class Bir2550Q(models.Model):
             'Text100': amt(self.output_tax_31b),
 
             # Text99  (x=163, y=860) → "32 Zero-Rated Sales" (A col only, no output tax)
-            'Text99': amt(self.zero_rated_sales) if self.zero_rated_sales else '0.00',
+            'Text99': amt(self.zero_rated_sales or 0.00),
 
             # Text102 (x=163, y=844) → "33 Exempt Sales" (A col only)
-            'Text102': amt(self.exempt_sales) if self.exempt_sales else '0.00',
+            'Text102': amt(self.exempt_sales),
 
             # Text101 (x=163, y=828) → "34A Total Sales (Sum 31A–33A)"
             'Text101': amt(self.total_sales_34a),
@@ -755,10 +798,10 @@ class Bir2550Q(models.Model):
             'Text103': amt(self.total_output_34b),
 
             # Text104 (x=376, y=810) → "35 Less: Output VAT on Uncollected Receivables" (B col)
-            'Text104': amt(self.output_vat_uncollected_35) if self.output_vat_uncollected_35 else '0.00',
+            'Text104': amt(self.output_vat_uncollected_35),
 
             # Text105 (x=376, y=795) → "36 Add: Output VAT on Recovered Uncollected Receivables" (B col)
-            'Text105': amt(self.output_vat_recovered_36) if self.output_vat_recovered_36 else '0.00',
+            'Text105': amt(self.output_vat_recovered_36),
 
             # Text106 (x=376, y=779) → "37 Total Adjusted Output Tax Due (34B - 35 + 36)"
             'Text106': amt(self.total_adjusted_output_tax),
@@ -838,122 +881,122 @@ class Bir2550Q(models.Model):
             # ── Part V – Schedule 1: Amortized Input Tax from Capital Goods ─
             # Row 1 (y=280):
             # Text136 (x=23)  → (A) Date Purchased/Imported (MM/DD/YYYY)
-            'Text136': self.capital_goods_date_1.strftime('%m/%d/%Y') if self.capital_goods_date_1 else '',
+            'Text136': ' ' + self.capital_goods_date_1.strftime('%m/%d/%Y') if self.capital_goods_date_1 else '',
 
             # Text138 (x=79)  → (B) Source Code (D=Domestic, I=Importation)
-            'Text138': self.capital_goods_source_1 or '',
+            'Text138': ' ' + self.capital_goods_source_1 or '',
 
             # Text140 (x=112) → (C) Description
-            'Text140': self.capital_goods_description_1 or '',
+            'Text140': ' ' + self.capital_goods_description_1 or '',
 
             # Text142 (x=187) → (D) Amount of Purchases/Importation of Capital Goods >P1M
-            'Text142': amt(self.capital_goods_amount_1),
+            'Text142': ' ' + self._fmt_amt(self.capital_goods_amount_1),
 
             # Text144 (x=269) → (E) Balance of Input Tax from Previous Period
-            'Text144': amt(self.capital_goods_balance_1),
+            'Text144': ' ' + self._fmt_amt(self.capital_goods_balance_1),
 
             # Text147 (x=337) → (F) Estimated Life (in months)
-            'Text147': str(self.capital_goods_estimated_life_1 or ''),
+            'Text147': ' ' + str(self.capital_goods_estimated_life_1 or ''),
 
             # Text149 (x=391) → (G) Recognized Life (in Months) / Remaining Life
-            'Text149': str(self.capital_goods_recognized_life_1 or ''),
+            'Text149': ' ' + str(self.capital_goods_recognized_life_1 or ''),
 
             # Text151 (x=449) → (H) Allowable Input Tax for the Period (E÷G × months used)
-            'Text151': amt(self.capital_goods_allowable_1),
+            'Text151': ' ' + self._fmt_amt(self.capital_goods_allowable_1),
 
             # Text153 (x=518) → (I) Balance of Input Tax to be Carried to Next Period (E Less H)
-            'Text153': amt(self.capital_goods_balance_cf_1),
+            'Text153': ' ' + self._fmt_amt(self.capital_goods_balance_cf_1),
 
 
             # Row 2 (y=272):
             # Text137 (x=23)  → (A) Date
-            'Text137': self.capital_goods_date_2.strftime('%m/%d/%Y') if self.capital_goods_date_2 else '',
+            'Text137': ' ' + self.capital_goods_date_2.strftime('%m/%d/%Y') if self.capital_goods_date_2 else '',
             # Text139 (x=79)  → (B) Source Code
-            'Text139': self.capital_goods_source_2 or '',
+            'Text139': ' ' + self.capital_goods_source_2 or '',
             # Text141 (x=112) → (C) Description
-            'Text141': self.capital_goods_description_2 or '',
+            'Text141': ' ' + self.capital_goods_description_2 or '',
             # Text143 (x=187) → (D) Amount
-            'Text143': amt(self.capital_goods_amount_2),
+            'Text143': ' ' + self._fmt_amt(self.capital_goods_amount_2),
             # Text145 (x=269) → (E) Balance of Input Tax
-            'Text145': amt(self.capital_goods_balance_2),
+            'Text145': ' ' + self._fmt_amt(self.capital_goods_balance_2),
             # Text148 (x=337) → (F) Estimated Life
-            'Text148': str(self.capital_goods_estimated_life_2 or ''),
+            'Text148': ' ' + str(self.capital_goods_estimated_life_2 or ''),
             # Text150 (x=391) → (G) Recognized Life
-            'Text150': str(self.capital_goods_recognized_life_2 or ''),
+            'Text150': ' ' + str(self.capital_goods_recognized_life_2 or ''),
             # Text152 (x=449) → (H) Allowable Input Tax
-            'Text152': amt(self.capital_goods_allowable_2),
+            'Text152': ' ' + self._fmt_amt(self.capital_goods_allowable_2),
             # Text154 (x=519) → (I) Balance to Carry Forward
-            'Text154': amt(self.capital_goods_balance_cf_2),
+            'Text154': ' ' + self._fmt_amt(self.capital_goods_balance_cf_2),
 
             # Total row:
             # Text146 (x=269, y=264) → Total Column E → feeds Part IV Item 39B
-            'Text146': amt((self.capital_goods_balance_1 or 0) + (self.capital_goods_balance_2 or 0)),
+            'Text146': ' ' + self._fmt_amt((self.capital_goods_balance_1 or 0) + (self.capital_goods_balance_2 or 0)),
             # Text155 (x=518, y=263) → Total Column I → feeds Part IV Item 52B
-            'Text155': amt((self.capital_goods_balance_cf_1 or 0) + (self.capital_goods_balance_cf_2 or 0)),
+            'Text155': ' ' + self._fmt_amt((self.capital_goods_balance_cf_1 or 0) + (self.capital_goods_balance_cf_2 or 0)),
 
             # ── Part V – Schedule 2: Input Tax Attributable to VAT Exempt Sales ─
             # Text51  (x=449, y=234) → Input Tax directly attributable to VAT Exempt Sale
-            'Text51': amt(self.input_tax_direct_exempt_51),
+            'Text51': ' ' + self._fmt_amt(self.input_tax_direct_exempt_51),
             # Text157 (x=449, y=225) → Ratable portion calculation result
-            'Text157': amt(self.input_tax_ratable_157),
+            'Text157': ' ' + self._fmt_amt(self.input_tax_ratable_157),
             # Text156 (x=449, y=196) → Total Input Tax attributable to Exempt Sale → Part IV Item 53
-            'Text156': amt(self.input_tax_exempt_sales_53),
+            'Text156': ' ' + self._fmt_amt(self.input_tax_exempt_sales_53),
 
             # ── Part V – Schedule 3: Creditable VAT Withheld ──────────────
             # Row 1 (y=165):
             # Text158 (x=23)  → (A) Period Covered
-            'Text158': self.creditable_vat_period_1 or '',
+            'Text158': ' ' + self.creditable_vat_period_1 or '',
             # Text159 (x=108) → (B) Name of Withholding Agent
-            'Text159': self.creditable_vat_agent_1 or '',
+            'Text159': ' ' + self.creditable_vat_agent_1 or '',
             # Text162 (x=390) → (C) Income Payment
-            'Text162': amt(self.creditable_vat_income_1),
+            'Text162': ' ' + self._fmt_amt(self.creditable_vat_income_1),
             # Text164 (x=503) → (D) Total Tax Withheld
-            'Text164': amt(self.creditable_vat_withheld_1),
+            'Text164': ' ' + self._fmt_amt(self.creditable_vat_withheld_1),
 
             # Row 2 (y=156):
             # Text160 (x=23)  → (A) Period Covered
-            'Text160': self.creditable_vat_period_2 or '',
+            'Text160': ' ' + self.creditable_vat_period_2 or '',
             # Text161 (x=108) → (B) Name of Withholding Agent
-            'Text161': self.creditable_vat_agent_2 or '',
+            'Text161': ' ' + self.creditable_vat_agent_2 or '',
             # Text163 (x=390) → (C) Income Payment
-            'Text163': amt(self.creditable_vat_income_2),
+            'Text163': ' ' + self._fmt_amt(self.creditable_vat_income_2),
             # Text174 (x=502) → (D) Total Tax Withheld
-            'Text174': amt(self.creditable_vat_withheld_2),
+            'Text174': ' ' + self._fmt_amt(self.creditable_vat_withheld_2),
 
             # Row 3 (y=147):
             # Text173 (x=390) → (C) Income Payment
-            'Text173': amt(self.creditable_vat_income_3),
+            'Text173': ' ' + self._fmt_amt(self.creditable_vat_income_3),
             # Text175 (x=502) → (D) Total Tax Withheld
-            'Text175': amt(self.creditable_vat_withheld_3),
+            'Text175': ' ' + self._fmt_amt(self.creditable_vat_withheld_3),
 
             # Text165 (x=390, y=118) → Total Column D → feeds Part II Item 16
-            'Text165': amt(self.creditable_vat_withheld),
+            'Text165': ' ' + self._fmt_amt(self.creditable_vat_withheld),
 
             # ── Part V – Schedule 4: Advance VAT Payment ──────────────────
             # Row 1 (y=118):
             # Text171 (x=23)  → (A) Period Covered
-            'Text171': self.advance_vat_period_1 or '',
+            'Text171': ' ' + self.advance_vat_period_1 or '',
             # Text169 (x=108) → (B) Name of Miller
-            'Text169': self.advance_vat_miller_1 or '',
+            'Text169': ' ' + self.advance_vat_miller_1 or '',
             # Text167 (x=255) → (C) Name of Taxpayer
-            'Text167': self.advance_vat_taxpayer_1 or '',
+            'Text167': ' ' + self.advance_vat_taxpayer_1 or '',
             # Text176 (x=503) → (E) Amount Paid
-            'Text176': amt(self.advance_vat_amount_1),
+            'Text176': ' ' + self._fmt_amt(self.advance_vat_amount_1),
 
             # Row 2 (y=108):
             # Text172 (x=23)  → (A) Period Covered
-            'Text172': self.advance_vat_period_2 or '',
+            'Text172': ' ' + self.advance_vat_period_2 or '',
             # Text170 (x=108) → (B) Name of Miller
-            'Text170': self.advance_vat_miller_2 or '',
+            'Text170': ' ' + self.advance_vat_miller_2 or '',
             # Text168 (x=255) → (C) Name of Taxpayer
-            'Text168': self.advance_vat_taxpayer_2 or '',
+            'Text168': ' ' + self.advance_vat_taxpayer_2 or '',
             # Text166 (x=390) → (D) Official Receipt Number
-            'Text166': self.advance_vat_or_number_2 or '',
+            'Text166': ' ' + self.advance_vat_or_number_2 or '',
             # Text177 (x=503) → (E) Amount Paid row 2
-            'Text177': amt(self.advance_vat_amount_2),
+            'Text177': ' ' + self._fmt_amt(self.advance_vat_amount_2),
 
             # Text178 (x=503, y=99) → Total Amount → feeds Part II Item 17
-            'Text178': amt(self.advance_vat_payments),
+            'Text178': ' ' + self._fmt_amt(self.advance_vat_payments),
         }
         return field_map
 
@@ -980,35 +1023,26 @@ class Bir2550Q(models.Model):
         writer = PdfWriter()
         writer.append(reader)
 
-        # Fields with custom letter-spacing (Tc) so each character lands
-        # precisely in its individual PDF box.
-        # Formula: Tc = field_width / num_input_chars - font_size(9.2307692)
-        #
-        # TIN (Text4/Text39): 17 chars "NNN NNN NNN NNNNN"
-        #   Text4  w=241.2/17=14.19 → Tc=4.96
-        #   Text39 w=197.4/17=11.61 → Tc=2.38
-        # Year Ended (Text1): 6 chars "MMYYYY" (slash pre-drawn)
-        #   w=85.4/6=14.23 → Tc=5.00
-        # Date From (Text2): 8 chars "MMDDYYYY" (slashes pre-drawn)
-        #   w=112.9/8=14.11 → Tc=4.88
-        # Date To (Text3): 8 chars "MMDDYYYY" (slashes pre-drawn)
-        #   w=113.9/8=14.24 → Tc=5.01
+        RIGHT_ALIGN_FIELDS = (
+            {'Text11', 'Text41', 'Text9', 'Text83', 'Text84', 'Text85', 'Text95'}
+            | {f'Text{i}' for i in range(69, 80)}
+            | {f'Text{i}' for i in range(89, 93)}
+            | {f'Text{i}' for i in range(99, 136)}
+        )
+
+        # SPACED_FIELDS - Manual character spacing
         SPACED_FIELDS = {
-            # TIN — spaces sit over pre-drawn "/" separators (17 cells)
-            'Text4':  ('10 Tc', 9.2),   # TIN page 1  (w=241.2 / 17)
-            'Text39': ('8.5 Tc', 9.2),   # TIN page 2  (w=197.4 / 17)
-            # Year Ended — 6 digits "MMYYYY", slash is pre-drawn (6 cells)
-            'Text1':  ('5.00 Tc', 9.2),   # Year Ended  (w=85.4  /  6)
-            # Dates — 8 digits "MMDDYYYY", slashes are pre-drawn (8 cells each)
-            'Text2':  ('10 Tc', 9.2),   # Period From (w=112.9 /  8)
-            'Text3':  ('10 Tc', 9.2),   # Period To   (w=113.9 /  8)
-            # Name / address fields — moderate spacing for letter cells
-            'Text6':  ('5 Tc',   9.2),    # Taxpayer Name p1
-            'Text98': ('5 Tc',   9.2),    # Taxpayer Name p2
-            'Text63': ('5 Tc',   9.2),    # Registered Address
-            'Text8':  ('5 Tc',   9.2),    # City/State
-            'Text9':  ('5 Tc',   9.2),    # Contact Number
-            'Text10': ('5 Tc',   9.2),    # Email
+            'Text4':  ('10 Tc', 9.2),
+            'Text39': ('8.5 Tc', 9.2),
+            'Text1':  ('5.00 Tc', 9.2),
+            'Text2':  ('10 Tc', 9.2),
+            'Text3':  ('10 Tc', 9.2),
+            'Text6':  ('5 Tc', 9.2),
+            'Text98': ('5 Tc', 9.2),
+            'Text63': ('5 Tc', 9.2),
+            'Text8':  ('5 Tc', 9.2),
+            'Text9':  ('5 Tc', 9.2),
+            'Text10': ('5 Tc', 9.2),
         }
 
         for page in writer.pages:
@@ -1019,14 +1053,19 @@ class Bir2550Q(models.Model):
                 if obj.get('/Subtype') != '/Widget':
                     continue
                 name = str(obj.get('/T', ''))
+                
+                # ── Character Spacing ──
                 if name in SPACED_FIELDS:
                     tc, fs = SPACED_FIELDS[name]
-                    # PDF DA syntax: color → char-spacing → font
-                    # Tc must be set BEFORE Tf so it applies when text is rendered
                     obj[NameObject('/DA')] = create_string_object(
-                        f'.2666667 .2666667 .2666667 rg\n{tc}\n/F0 {fs} Tf'
+                        f'.2666667 .2666667 .2666667 rg {tc} /F0 {fs} Tf'
                     )
-                # Remove visible field borders so filled values blend cleanly
+                
+                # ── RIGHT ALIGN for monetary fields (EXCEPT Part V Schedules) ──
+                if name in RIGHT_ALIGN_FIELDS:
+                    obj[NameObject('/Q')] = NumberObject(2)
+                
+                # ── Remove borders ──
                 obj[NameObject('/BS')] = DictionaryObject({
                     NameObject('/W'): NumberObject(0)
                 })
