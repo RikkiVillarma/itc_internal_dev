@@ -39,6 +39,7 @@
         'report/disbursement_voucher_report.xml',
         'report/bir_1702q_report.xml',
         'report/bir_2307_report.xml',
+        'report/bir_2550m_report.xml',
         #Views
         #'views/salary_advance_views.xml',
         'views/purchase_journal_wizard_views.xml',

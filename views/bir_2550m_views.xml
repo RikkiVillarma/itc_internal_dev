@@ -36,14 +36,13 @@
                 <field name="name"         string="Reference No."/>
                 <field name="display_name" string="Description"/>
                 <field name="company_id"   groups="base.group_multi_company"/>
-                <field name="year"/>
+                <field name="year" readonly="state not in ('draft',)" options="{'enable_formatting': False}"/>
                 <field name="month"/>
                 <field name="date_from"/>
                 <field name="date_to"/>
-                <field name="item_16a" string="Total Sales"     sum="Total" widget="monetary"/>
-                <field name="item_16b" string="Output Tax"      sum="Total" widget="monetary"/>
-                <field name="item_22"  string="Net VAT Payable" sum="Total" widget="monetary"/>
-                <field name="item_26"  string="Amount Payable"  sum="Grand Total" widget="monetary"/>
+                <field name="item_19"  string="VAT Payable"        sum="Total" widget="monetary"/>
+                <field name="item_21"  string="Tax Payable"        sum="Total" widget="monetary"/>
+                <field name="item_23"  string="Total Amount Due"   sum="Grand Total" widget="monetary"/>
                 <field name="state"
                        widget="badge"
                        decoration-info="state == 'draft'"
@@ -90,7 +89,7 @@
                     <button name="action_reset_to_draft"
                             string="Reset to Draft"
                             type="object" class="btn-secondary"
-                            invisible="state not in ('generated', 'confirmed')"/>
+                            invisible="state == 'draft'"/>
                     <button name="action_cancel"
                             string="Cancel"
                             type="object" class="btn-danger"
@@ -106,11 +105,27 @@
                             type="object" class="btn-secondary"
                             invisible="state != 'draft'"
                             confirm="Create draft returns for all 12 months of this year? Existing months will be skipped."/>
+                    <button name="action_generate_report_chatter"
+                            string="Print 2550m"
+                            type="object"
+                            class="btn-secondary"
+                            invisible="state == 'cancelled'"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,generated,confirmed,filed"/>
                 </header>
 
                 <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_generate_pdf"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-print">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Print</span>
+                                <span class="o_stat_text">Report</span>
+                            </div>
+                        </button>
+                    </div>
 
                     <div class="oe_title">
                         <label for="name" string="Reference"/>
@@ -136,12 +151,13 @@
                         <group string="Return Information">
                             <field name="company_id" readonly="state not in ('draft',)"
                                    options="{'no_create': True}"/>
-                            <field name="year"  readonly="state not in ('draft',)"/>
+                            <field name="year"  readonly="state not in ('draft',)" options="{'enable_formatting': False}"/>
                             <field name="month" readonly="state not in ('draft',)"/>
                             <field name="date_from" readonly="1"/>
                             <field name="date_to"   readonly="1"/>
                             <field name="is_amended"/>
                             <field name="number_of_sheets"/>
+                            <field name="hide_auto_fields"/>
                             <field name="currency_id" invisible="1"/>
                         </group>
                         <group string="Filing Audit">
@@ -174,7 +190,8 @@
                         <page string="Sch.1 — Vatable Sales" name="sch1">
                             <p class="text-muted">
                                 Schedule of Sales/Receipts and Output Tax.
-                                Lines here feed into <strong>Items 12A and 12B</strong>.
+                                Lines here feed into <strong>Items 12A, 12B, 12C</strong>
+                                (and each subsequent row = Items 13, 14, 15, 16).
                                 Output Tax is auto-computed at 12%.
                             </p>
                             <field name="sch1_ids"
@@ -190,21 +207,13 @@
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Totals (→ Item 12A / 12B)">
-                                    <field name="item_12a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_12b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== SCHEDULE 2 ===== -->
                         <page string="Sch.2 — Capital Goods ≤ ₱1M" name="sch2">
                             <p class="text-muted">
                                 Purchases/Importation of Capital Goods with aggregate amount
-                                not exceeding ₱1 Million. Feeds into <strong>Items 18A and 18B</strong>.
+                                not exceeding ₱1 Million. Input Tax is auto-computed at 12%.
                             </p>
                             <field name="sch2_ids"
                                    readonly="state in ('confirmed','filed','cancelled')">
@@ -218,14 +227,6 @@
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Totals (→ Item 18A / 18B)">
-                                    <field name="item_18a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== SCHEDULE 3 ===== -->
@@ -233,7 +234,7 @@
                             <p class="text-muted">
                                 Purchases/Importation of Capital Goods exceeding ₱1 Million.
                                 Allowable input tax is amortized over the estimated/recognized life
-                                (max 60 months). Feeds into <strong>Items 18C, 18D, and 20A</strong>.
+                                (max 60 months).
                             </p>
                             <field name="sch3_ids"
                                    readonly="state in ('confirmed','filed','cancelled')">
@@ -254,16 +255,6 @@
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Totals (→ Items 18C / 18D / 20A)">
-                                    <field name="item_18c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18d" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_20a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== SCHEDULE 4 ===== -->
@@ -285,17 +276,11 @@
                                     <field name="total_input_tax"     string="Total Input Tax"
                                            readonly="1" sum="Total"/>
                                     <field name="standard_input_tax"  string="Less: Standard Input Tax" sum="Total"/>
-                                    <field name="closed_to_expense"   string="Closed to Expense (→20B)"
+                                    <field name="closed_to_expense"   string="Closed to Expense"
                                            readonly="1" sum="Total"/>
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Total (→ Item 20B)">
-                                    <field name="item_20b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== SCHEDULE 5 ===== -->
@@ -313,24 +298,18 @@
                                     <field name="input_tax_not_direct"  string="Non-Direct Input Tax"  sum="Total"/>
                                     <field name="ratable_portion"       string="Ratable Portion"
                                            readonly="1" sum="Total"/>
-                                    <field name="total_allocable"       string="Total Allocable (→20C)"
+                                    <field name="total_allocable"       string="Total Allocable"
                                            readonly="1" sum="Total"/>
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Total (→ Item 20C)">
-                                    <field name="item_20c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== SCHEDULE 6 ===== -->
                         <page string="Sch.6 — Creditable VAT Withheld" name="sch6">
                             <p class="text-muted">
                                 Tax Withheld Claimed as Tax Credit (BIR Form 2307).
-                                Feeds into <strong>Item 23A</strong>.
+                                Feeds into <strong>Item 20B</strong>.
                             </p>
                             <field name="sch6_ids"
                                    readonly="state in ('confirmed','filed','cancelled')">
@@ -343,19 +322,13 @@
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Total (→ Item 23A)">
-                                    <field name="item_23a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== SCHEDULE 7 ===== -->
                         <page string="Sch.7 — Advance Payments" name="sch7">
                             <p class="text-muted">
                                 Schedule of Advance Payments (Sugar and Flour Industries).
-                                Feeds into <strong>Item 23B</strong>.
+                                Feeds into <strong>Item 20A</strong>.
                             </p>
                             <field name="sch7_ids"
                                    readonly="state in ('confirmed','filed','cancelled')">
@@ -369,19 +342,13 @@
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Total (→ Item 23B)">
-                                    <field name="item_23b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== SCHEDULE 8 ===== -->
                         <page string="Sch.8 — VAT Withheld on Govt Sales" name="sch8">
                             <p class="text-muted">
                                 VAT Withheld on Sales to Government.
-                                Feeds into <strong>Item 23C</strong>.
+                                Feeds into <strong>Item 20C</strong>.
                             </p>
                             <field name="sch8_ids"
                                    readonly="state in ('confirmed','filed','cancelled')">
@@ -394,412 +361,163 @@
                                     <field name="currency_id" invisible="1"/>
                                 </list>
                             </field>
-                            <group>
-                                <group string="Total (→ Item 23C)">
-                                    <field name="item_23c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
                         </page>
 
                         <!-- ===== PAGE 1: PART II SUMMARY ===== -->
                         <page string="Page 1 — Part II Summary" name="summary">
-                            <separator string="Sales / Receipts and Output Tax (Items 12–16)"/>
-                            <group>
-                                <group string="Sales / Receipts (Exclusive of VAT)">
-                                    <field name="item_12a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_13a"
-                                           readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_14"
-                                           readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_15"
-                                           readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_16a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                                <group string="Output Tax Due">
-                                    <field name="item_12b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_13b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_16b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
 
-                            <separator string="Allowable Input Tax — Carryover (Item 17)"/>
+                            <separator string="Item 18 — Less: Input Taxes"/>
                             <group>
                                 <group>
-                                    <field name="item_17a" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_17b" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_17c" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_17d" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_17e" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_17f" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
-
-                            <separator string="Current Purchases (Item 18)"/>
-                            <group>
-                                <group string="Purchase Amounts">
-                                    <field name="item_18a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18e" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18g" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18i" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18k" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18m" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18n" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18p" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                                <group string="Input Tax">
-                                    <field name="item_18b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18d" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18f" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18h" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18j" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18l" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18o" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_19" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
-
-                            <separator string="Deductions from Input Tax (Item 20)"/>
-                            <group>
-                                <group>
-                                    <field name="item_20a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_20b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_20c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_20d" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_20e" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_20f" readonly="1" widget="monetary"
+                                    <field name="item_18a" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_18b" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_18c" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_18d" widget="monetary" readonly="1"
                                            options="{'currency_field': 'currency_id'}"/>
                                 </group>
                                 <group>
-                                    <field name="item_21" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_22" readonly="1" widget="monetary"
+                                    <field name="item_18e" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_18f" widget="monetary" readonly="1"
                                            options="{'currency_field': 'currency_id'}"/>
                                 </group>
                             </group>
 
-                            <separator string="Tax Credits / Payments (Item 23)"/>
+                            <separator string="Item 19 — VAT Payable"/>
+                            <group>
+                                <field name="item_19" widget="monetary" readonly="1"
+                                       options="{'currency_field': 'currency_id'}"/>
+                            </group>
+
+                            <separator string="Item 20 — Less: Tax Credits/Payments"/>
                             <group>
                                 <group>
-                                    <field name="item_23a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_23b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_23c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_23d" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_23e" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_23f" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_23g" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                                <group string="Payable and Penalties">
-                                    <field name="item_24"  readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_25a" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_25b" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_25c" readonly="state in ('confirmed','filed','cancelled')"
-                                           widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_25d" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_26"  readonly="1" widget="monetary"
+                                    <field name="item_20a" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_20b" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_20c" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_20d" widget="monetary" readonly="1"
                                            options="{'currency_field': 'currency_id'}"/>
                                 </group>
                             </group>
-                        </page>
 
-                        <!-- ===== PAGE 2: SCHEDULE 1 ===== -->
-                        <page string="Page 2 — Sch.1 Vatable Sales" name="sch1">
-                            <p class="text-muted">
-                                Schedule of Sales/Receipts and Output Tax per industry.
-                                Click <strong>Sync from Schedules</strong> after editing to update Items 12A/12B.
-                                Output Tax is auto-computed at 12% per line.
-                            </p>
-                            <field name="sch1_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="sequence" widget="handle"/>
-                                    <field name="industry" string="Industries Covered by VAT"/>
-                                    <field name="atc" string="ATC"/>
-                                    <field name="sales_amount" string="Sales/Receipts"
-                                           sum="Total Sales"/>
-                                    <field name="output_tax" string="Output Tax (12%)"
-                                           readonly="1" sum="Total Output Tax"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
+                            <separator string="Item 21 — Tax Payable/(Overpayment)"/>
                             <group>
-                                <group string="Totals → Item 12A / 12B (sync to update)">
-                                    <field name="item_12a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_12b" readonly="1" widget="monetary"
+                                <field name="item_21" widget="monetary" readonly="1"
+                                       options="{'currency_field': 'currency_id'}"/>
+                            </group>
+
+                            <separator string="Item 22 — Add: Penalties"/>
+                            <group>
+                                <group>
+                                    <field name="item_22a" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_22b" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                    <field name="item_22c" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"
+                                           readonly="state in ('confirmed','filed','cancelled')"/>
+                                </group>
+                                <group>
+                                    <field name="item_22d" widget="monetary" readonly="1"
                                            options="{'currency_field': 'currency_id'}"/>
                                 </group>
                             </group>
+
+                            <separator string="Item 23 — Total Amount Payable/(Overpayment)"/>
+                            <group>
+                                <field name="item_23" widget="monetary" readonly="1"
+                                       options="{'currency_field': 'currency_id'}"/>
+                            </group>
+
                         </page>
 
-                        <!-- ===== PAGE 2: SCHEDULE 2 ===== -->
-                        <page string="Page 2 — Sch.2 Capital Goods ≤ ₱1M" name="sch2">
-                            <p class="text-muted">
-                                Purchases/Importation of Capital Goods not exceeding ₱1M.
-                                Feeds into <strong>Items 18A and 18B</strong>.
-                            </p>
-                            <field name="sch2_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="date_purchased"/>
-                                    <field name="description"/>
-                                    <field name="amount" string="Amount (Net of VAT)" sum="Total"/>
-                                    <field name="input_tax" string="Input Tax (12%)"
-                                           readonly="1" sum="Total Input Tax"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
+                        <!-- ===== DECLARATION ===== -->
+                        <page string="Declaration (Items 24–25)" name="declaration">
+                            <separator string="Item 24 — President/VP/Authorized Representative/Tax Agent"/>
                             <group>
-                                <group string="Totals → Item 18A / 18B">
-                                    <field name="item_18a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
+                                <group>
+                                    <field name="signatory_24_name"  string="Name of Signatory"/>
+                                    <field name="signatory_24_title" string="Title/Position"/>
+                                    <field name="signatory_24_tin"   string="TIN of Tax Agent (if applicable)"/>
                                 </group>
                             </group>
-                        </page>
 
-                        <!-- ===== PAGE 2: SCHEDULE 3 ===== -->
-                        <page string="Page 2 — Sch.3 Capital Goods > ₱1M" name="sch3">
-                            <p class="text-muted">
-                                Capital Goods exceeding ₱1M. Input tax is amortized over
-                                estimated life (max 60 months). Feeds into <strong>Items 18C, 18D, and 20A</strong>.
-                            </p>
-                            <field name="sch3_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="is_previous_period" string="Prev. Period"/>
-                                    <field name="date_purchased"/>
-                                    <field name="description"/>
-                                    <field name="amount" string="Amount (Net of VAT)" sum="Total"/>
-                                    <field name="input_tax" string="Input Tax (C×12%)"
-                                           readonly="1" sum="Total"/>
-                                    <field name="est_life_months" string="Est. Life (mos.)"/>
-                                    <field name="recognized_life" string="Recognized (mos.)"
-                                           readonly="1"/>
-                                    <field name="allowable_input_tax" string="Allowable (Period)"
-                                           readonly="1" sum="Total Allowable"/>
-                                    <field name="balance_input_tax" string="Balance (Next Period)"
-                                           readonly="1" sum="Total Balance"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
+                            <separator string="Item 25 — Treasurer/Asst. Treasurer/Authorized Representative"/>
                             <group>
-                                <group string="Totals → Items 18C / 18D / 20A">
-                                    <field name="item_18c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_18d" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                    <field name="item_20a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
-                        </page>
-
-                        <!-- ===== PAGE 2: SCHEDULE 4 ===== -->
-                        <page string="Page 2 — Sch.4 Input Tax on Govt Sales" name="sch4">
-                            <p class="text-muted">
-                                Input Tax Attributable to Sale to Government.
-                                Feeds into <strong>Item 20B</strong>.
-                            </p>
-                            <field name="sch4_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="input_tax_direct" string="Input Tax Directly Attributable" sum="Total"/>
-                                    <field name="taxable_sales_govt" string="Taxable Govt Sales" sum="Total"/>
-                                    <field name="total_sales" string="Total Sales" sum="Total"/>
-                                    <field name="input_tax_not_direct" string="Non-Direct Input Tax" sum="Total"/>
-                                    <field name="ratable_portion" string="Ratable Portion"
-                                           readonly="1" sum="Total"/>
-                                    <field name="total_input_tax" string="Total Input Tax"
-                                           readonly="1" sum="Total"/>
-                                    <field name="standard_input_tax" string="Less: Standard Input Tax" sum="Total"/>
-                                    <field name="closed_to_expense" string="Closed to Expense (→20B)"
-                                           readonly="1" sum="Total"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
-                            <group>
-                                <group string="Total → Item 20B">
-                                    <field name="item_20b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
-                        </page>
-
-                        <!-- ===== PAGE 2: SCHEDULE 5 ===== -->
-                        <page string="Page 2 — Sch.5 Input Tax on Exempt Sales" name="sch5">
-                            <p class="text-muted">
-                                Input Tax Attributable to Exempt Sales.
-                                Feeds into <strong>Item 20C</strong>.
-                            </p>
-                            <field name="sch5_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="input_tax_direct" string="Input Tax Directly Attributable" sum="Total"/>
-                                    <field name="taxable_exempt_sale" string="Taxable Exempt Sale" sum="Total"/>
-                                    <field name="total_sales" string="Total Sales" sum="Total"/>
-                                    <field name="input_tax_not_direct" string="Non-Direct Input Tax" sum="Total"/>
-                                    <field name="ratable_portion" string="Ratable Portion"
-                                           readonly="1" sum="Total"/>
-                                    <field name="total_allocable" string="Total Allocable (→20C)"
-                                           readonly="1" sum="Total"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
-                            <group>
-                                <group string="Total → Item 20C">
-                                    <field name="item_20c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
-                        </page>
-
-                        <!-- ===== PAGE 2: SCHEDULE 6 ===== -->
-                        <page string="Page 2 — Sch.6 Creditable VAT Withheld" name="sch6">
-                            <p class="text-muted">
-                                Tax Withheld Claimed as Tax Credit (BIR Form 2307).
-                                Feeds into <strong>Item 23A</strong>.
-                            </p>
-                            <field name="sch6_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="period_covered" string="Period Covered"/>
-                                    <field name="withholding_agent" string="Withholding Agent"/>
-                                    <field name="income_payment" string="Income Payment" sum="Total"/>
-                                    <field name="total_tax_withheld" string="Total Tax Withheld" sum="Total"/>
-                                    <field name="applied_current_mo" string="Applied Current Mo." sum="Total"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
-                            <group>
-                                <group string="Total → Item 23A">
-                                    <field name="item_23a" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
-                        </page>
-
-                        <!-- ===== PAGE 2: SCHEDULE 7 ===== -->
-                        <page string="Page 2 — Sch.7 Advance Payments" name="sch7">
-                            <p class="text-muted">
-                                Advance Payments for Sugar and Flour Industries.
-                                Feeds into <strong>Item 23B</strong>.
-                            </p>
-                            <field name="sch7_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="period_covered" string="Period Covered"/>
-                                    <field name="miller_name" string="Name of Miller"/>
-                                    <field name="taxpayer_name" string="Name of Taxpayer"/>
-                                    <field name="or_number" string="OR Number"/>
-                                    <field name="amount_paid" string="Amount Paid" sum="Total"/>
-                                    <field name="applied_current_mo" string="Applied Current Mo." sum="Total"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
-                            <group>
-                                <group string="Total → Item 23B">
-                                    <field name="item_23b" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
-                                </group>
-                            </group>
-                        </page>
-
-                        <!-- ===== PAGE 2: SCHEDULE 8 ===== -->
-                        <page string="Page 2 — Sch.8 VAT on Govt Sales" name="sch8">
-                            <p class="text-muted">
-                                VAT Withheld on Sales to Government.
-                                Feeds into <strong>Item 23C</strong>.
-                            </p>
-                            <field name="sch8_ids"
-                                   readonly="state in ('confirmed','filed','cancelled')">
-                                <list editable="bottom">
-                                    <field name="period_covered" string="Period Covered"/>
-                                    <field name="withholding_agent" string="Withholding Agent"/>
-                                    <field name="income_payment" string="Income Payment" sum="Total"/>
-                                    <field name="total_tax_withheld" string="Total Tax Withheld" sum="Total"/>
-                                    <field name="applied_current_mo" string="Applied Current Mo." sum="Total"/>
-                                    <field name="currency_id" invisible="1"/>
-                                </list>
-                            </field>
-                            <group>
-                                <group string="Total → Item 23C">
-                                    <field name="item_23c" readonly="1" widget="monetary"
-                                           options="{'currency_field': 'currency_id'}"/>
+                                <group>
+                                    <field name="signatory_25_name"  string="Name of Signatory"/>
+                                    <field name="signatory_25_title" string="Title/Position"/>
+                                    <field name="signatory_25_accreditation"
+                                           string="Tax Agent Accreditation No./Date (if applicable)"/>
                                 </group>
                             </group>
                         </page>
 
                         <!-- ===== PAYMENT DETAILS ===== -->
                         <page string="Part III — Payment Details" name="payment">
+
+                            <separator string="Item 26 — Cash/Bank Debit Memo"/>
                             <group>
                                 <group>
-                                    <field name="payment_method"
-                                           readonly="state in ('filed','cancelled')"/>
-                                    <field name="payment_bank"
-                                           readonly="state in ('filed','cancelled')"/>
-                                    <field name="payment_number"
-                                           readonly="state in ('filed','cancelled')"/>
-                                    <field name="payment_date"
-                                           readonly="state in ('filed','cancelled')"/>
-                                    <field name="payment_amount"
-                                           readonly="state in ('filed','cancelled')"
-                                           widget="monetary"
+                                    <field name="item_26_amount" string="26 Amount" widget="monetary"
                                            options="{'currency_field': 'currency_id'}"/>
                                 </group>
                             </group>
+
+                            <separator string="Item 27 — Check"/>
+                            <group>
+                                <group>
+                                    <field name="item_27a_bank"   string="27A Drawee Bank/Agency"/>
+                                    <field name="item_27b_number" string="27B Number"/>
+                                    <field name="item_27c_date"   string="27C Date"/>
+                                    <field name="item_27d_amount" string="27D Amount" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"/>
+                                </group>
+                            </group>
+
+                            <separator string="Item 28 — Tax Debit Memo"/>
+                            <group>
+                                <group>
+                                    <field name="item_28a_number" string="28A Number"/>
+                                    <field name="item_28b_date"   string="28B Date"/>
+                                    <field name="item_28c_amount" string="28C Amount" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"/>
+                                </group>
+                            </group>
+
+                            <separator string="Item 29 — Others"/>
+                            <group>
+                                <group>
+                                    <field name="item_29a_bank"   string="29A Drawee Bank/Agency"/>
+                                    <field name="item_29b_number" string="29B Number"/>
+                                    <field name="item_29c_date"   string="29C Date"/>
+                                    <field name="item_29d_amount" string="29D Amount" widget="monetary"
+                                           options="{'currency_field': 'currency_id'}"/>
+                                </group>
+                            </group>
+
+                            <separator string="Machine Validation / Revenue Official Receipt Details"/>
+                            <field name="machine_validation_details"
+                                   placeholder="If not filed with the bank..."/>
+
+                            <separator string="Stamp of Receiving Office"/>
+                            <field name="receiving_office_stamp"
+                                   placeholder="Stamp of Receiving Office and Date of Receipt..."/>
                         </page>
 
                         <!-- ===== NOTES ===== -->
@@ -829,7 +547,7 @@
             <search string="Search BIR 2550M Returns">
                 <field name="name"         string="Reference No."/>
                 <field name="display_name" string="Description"/>
-                <field name="year"         string="Year"/>
+                <field name="year"         string="Year" options="{'enable_formatting': False}"/>
                 <field name="month"/>
                 <field name="company_id"   groups="base.group_multi_company"/>
 
@@ -879,7 +597,5 @@
                to batch-create all months for a year at once.</p>
         </field>
     </record>
-
-
 
 </odoo>

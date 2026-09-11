@@ -1,0 +1,340 @@
+<odoo>
+
+    <record id="a4_paperformat_ml" model="report.paperformat">
+        <field name="name">A4 Paperformat (ML Development)</field>
+        <field name="default" eval="False"/>
+        <field name="format">custom</field>
+        <field name="page_width">210</field>
+        <field name="page_height">297</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">0</field>
+        <field name="margin_bottom">0</field>
+        <field name="margin_left">0</field>
+        <field name="margin_right">0</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <template id="report_bir_2550m_overlay">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <main>
+                    <div style="position:absolute; top:0; left:0; width:290mm; height:410mm; z-index:0;                                 background-image:url('https://res.cloudinary.com/dnb0wqyr8/image/upload/v1787537729/2550_yhk4tz.jpg');                                 background-size:100% 100%;                                 background-repeat:no-repeat;                                 background-position:top left;"/>
+
+                    <t t-if="not o.hide_auto_fields">
+
+                        <!-- ============ AMENDED RETURN CHECKBOX ============ -->
+                        <div t-if="o.is_amended" style="position:absolute; top:192.5px; left:596px; font-size:11pt; z-index:1;">X</div>
+                        <div t-if="not o.is_amended" style="position:absolute; top:192.5px; left:661.5px; font-size:11pt; z-index:1;">X</div>
+
+                        <!-- ============ NUMBER OF SHEETS ATTACHED ============ -->
+                        <div style="position:absolute; top:190px; left:970px; font-size:11pt; z-index:1; white-space:nowrap; letter-spacing:20px;">
+                            <t t-esc="'{:02d}'.format(int(o.number_of_sheets or 0))"/>
+                        </div>
+
+                        <!-- ============ PERIOD (MMYYYY) ============ -->
+                        <div style="position:absolute; top:190px; left:339px; font-size:11pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
+                            <t t-esc="o.date_from.strftime('%m%Y') if o.date_from else ''"/>
+                        </div>
+
+                        <!-- ============ TIN (grouped 3-3-3-5) ============ -->
+                        <t t-set="tin_str" t-value="(o.tin or '').replace('-', '')"/>
+                        <t t-set="tin_top" t-value="240"/>
+                        <t t-set="tin_left" t-value="140"/>
+                        <t t-set="group_sizes" t-value="[3, 3, 3, 5]"/>
+                        <t t-set="group_width_per_digit" t-value="25"/>
+                        <t t-set="group_gap" t-value="-13"/>
+                        <t t-set="digit_spacing" t-value="1"/>
+                        <t t-foreach="enumerate(group_sizes)" t-as="item">
+                            <t t-set="g" t-value="item[0]"/>
+                            <t t-set="size" t-value="item[1]"/>
+                            <t t-set="prev_count" t-value="sum(group_sizes[:g])"/>
+                            <t t-set="chunk" t-value="tin_str[prev_count: prev_count + size]"/>
+                            <div t-attf-style="position:absolute; top:#{tin_top}px; left:#{tin_left + (prev_count * group_width_per_digit) + (g * group_gap)}px; width:#{size * group_width_per_digit}px; font-size:11pt; letter-spacing:#{digit_spacing}px; z-index:1; white-space:nowrap;">
+                                <t t-esc="chunk"/>
+                            </div>
+                        </t>
+
+                        <!-- ============ RDO CODE ============ -->
+                        <div style="position:absolute; top:242px; left:490px; font-size:11pt; z-index:1; letter-spacing:15px; white-space:nowrap;">
+                            <t t-esc="o.rdo_code or ''"/>
+                        </div>
+
+                        <!-- ============ LINE OF BUSINESS ============ -->
+                        <div style="position:absolute; top:240px; left:760px; font-size:11pt; z-index:1; white-space:nowrap; letter-spacing:1px">
+                            <t t-esc="o.line_of_business or ' '"/>
+                        </div>
+
+                        <!-- ============ REGISTERED NAME ============ -->
+                        <div style="position:absolute; top:285px; left:95px; font-size:11pt; z-index:1; white-space:nowrap; letter-spacing:1px">
+                            <t t-esc="o.registered_name or ''"/>
+                        </div>
+
+                        <!-- ============ REGISTERED ADDRESS (10pt only) ============ -->
+                        <div style="position:absolute; top:321px; left:88px; width:714.4px; font-size:10pt; z-index:1; white-space:normal; letter-spacing:1px;">
+                            <t t-esc="o.registered_address or ''"/>
+                        </div>
+
+                        <!-- ============ ZIP CODE ============ -->
+                        <div style="position:absolute; top:335px; left:955px; font-size:11pt; z-index:1; letter-spacing:12px; white-space:nowrap;">
+                            <t t-esc="o.zip_code or ''"/>
+                        </div>
+
+                        <!-- ============ TELEPHONE NUMBER ============ -->
+                        <div style="position:absolute; top:285px; left:870px; font-size:11pt; z-index:1; white-space:nowrap; letter-spacing:6px">
+                            <t t-esc="o.telephone_number or ''"/>
+                        </div>
+
+                        <!-- ============ TAX RELIEF ============ -->
+                        <div t-if="o.has_tax_relief" style="position:absolute; top:375px; left:432px; font-size:11pt; z-index:1;">X</div>
+                        <div t-if="not o.has_tax_relief" style="position:absolute; top:375px; left:526.5px; font-size:11pt; z-index:1;">X</div>
+                        <div t-if="o.has_tax_relief" style="position:absolute; top:370px; left:780px; width:250px; font-size:11pt; z-index:1; white-space:nowrap; letter-spacing:1px;">
+                            <t t-esc="o.tax_relief_specify or ''"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- PART II - ITEMS 12 to 17                          -->
+                        <!-- ================================================= -->
+
+                        <t t-set="sch1_lines" t-value="o.sch1_ids[:5]"/>
+                        <t t-set="row_top_start" t-value="442"/>
+                        <t t-set="row_spacing" t-value="24"/>
+
+                        <t t-foreach="enumerate(sch1_lines)" t-as="item">
+                            <t t-set="idx" t-value="item[0]"/>
+                            <t t-set="line" t-value="item[1]"/>
+                            <t t-set="row_top" t-value="row_top_start + (idx * row_spacing)"/>
+
+                            <!-- Column 1: Industry -->
+                            <div t-attf-style="position:absolute; top:#{row_top}px; left:95px; width:215px; font-size:11pt; z-index:1; white-space:nowrap; overflow:hidden;">
+                                <t t-esc="line.industry or ''"/>
+                            </div>
+
+                            <!-- Column 2: ATC -->
+                            <div t-attf-style="position:absolute; top:#{row_top}px; left:365px; width:80px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:1px;">
+                                <t t-esc="line.atc or ''"/>
+                            </div>
+
+                            <!-- Column 3: Sales Amount -->
+                            <div t-attf-style="position:absolute; top:#{row_top}px; left:585px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                                <t t-esc="'{:,.2f}'.format(line.sales_amount or 0.0)"/>
+                            </div>
+
+                            <!-- Column 4: Output Tax -->
+                            <div t-attf-style="position:absolute; top:#{row_top}px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                                <t t-esc="'{:,.2f}'.format(line.output_tax or 0.0)"/>
+                            </div>
+                        </t>
+
+                        <!-- ============ ITEM 17: TOTAL ============ -->
+                        <div style="position:absolute; top:570px; left:585px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(sum(o.sch1_ids.mapped('sales_amount')) or 0.0)"/>
+                        </div>
+                        <div style="position:absolute; top:570px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(sum(o.sch1_ids.mapped('output_tax')) or 0.0)"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- ITEM 18: Less: Input Taxes                         -->
+                        <!-- ================================================= -->
+
+                        <!-- 18A Transitional/Presumptive Input Tax -->
+                        <div style="position:absolute; top:605px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_18a or 0.0)"/>
+                        </div>
+                        <!-- 18B Carried Over from Previous Return Period -->
+                        <div style="position:absolute; top:628px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_18b or 0.0)"/>
+                        </div>
+                        <!-- 18C On Taxable Goods/Services -->
+                        <div style="position:absolute; top:653px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_18c or 0.0)"/>
+                        </div>
+                        <!-- 18D Total Available Input Taxes -->
+                        <div style="position:absolute; top:676px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(o.item_18d or 0.0)"/>
+                        </div>
+                        <!-- 18E Less: Any Refund/TCC Claimed -->
+                        <div style="position:absolute; top:701px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_18e or 0.0)"/>
+                        </div>
+                        <!-- 18F Net Creditable Input Tax -->
+                        <div style="position:absolute; top:726px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(o.item_18f or 0.0)"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- ITEM 19: VAT Payable                               -->
+                        <!-- ================================================= -->
+                        <div style="position:absolute; top:755px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(o.item_19 or 0.0)"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- ITEM 20: Less: Tax Credits/Payments                -->
+                        <!-- ================================================= -->
+
+                        <!-- 20A Advance Payments -->
+                        <div style="position:absolute; top:792px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_20a or 0.0)"/>
+                        </div>
+                        <!-- 20B Creditable Value-added Tax Withheld -->
+                        <div style="position:absolute; top:816px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_20b or 0.0)"/>
+                        </div>
+                        <!-- 20C VAT Paid in Return Previously Filed -->
+                        <div style="position:absolute; top:842px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_20c or 0.0)"/>
+                        </div>
+                        <!-- 20D Total Tax Credits/Payments -->
+                        <div style="position:absolute; top:868px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(o.item_20d or 0.0)"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- ITEM 21: Tax Payable/(Overpayment)                 -->
+                        <!-- ================================================= -->
+                        <div style="position:absolute; top:907px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(o.item_21 or 0.0)"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- ITEM 22: Add: Penalties                            -->
+                        <!-- ================================================= -->
+
+                        <!-- 22A Surcharge -->
+                        <div style="position:absolute; top:940px; left:245px; width:140px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_22a or 0.0)"/>
+                        </div>
+                        <!-- 22B Interest -->
+                        <div style="position:absolute; top:940px; left:436px; width:140px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_22b or 0.0)"/>
+                        </div>
+                        <!-- 22C Compromise -->
+                        <div style="position:absolute; top:940px; left:627px; width:140px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_22c or 0.0)"/>
+                        </div>
+                        <!-- 22D Total Penalties -->
+                        <div style="position:absolute; top:940px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(o.item_22d or 0.0)"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- ITEM 23: Total Amount Payable/(Overpayment)        -->
+                        <!-- ================================================= -->
+                        <div style="position:absolute; top:967px; left:850px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px; font-weight:bold;">
+                            <t t-esc="'{:,.2f}'.format(o.item_23 or 0.0)"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- DECLARATION (Items 24 & 25)                        -->
+                        <!-- ================================================= -->
+
+                        <!-- ITEM 24 - Signatory -->
+                        <div style="position:absolute; top:1023px; left:187px; width:388px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center;">
+                            <t t-esc="o.signatory_24_name or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1067px; left:187px; width:388px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; font-style:italic;">
+                            <t t-esc="o.signatory_24_title or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1103px; left:187px; width:388px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:2px;">
+                            <t t-esc="o.signatory_24_tin or ''"/>
+                        </div>
+
+                        <!-- ITEM 25 - Treasurer -->
+                        <div style="position:absolute; top:1023px; left:670px; width:375px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center;">
+                            <t t-esc="o.signatory_25_name or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1067px; left:670px; width:375px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; font-style:italic;">
+                            <t t-esc="o.signatory_25_title or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1103px; left:670px; width:375px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:2px;">
+                            <t t-esc="o.signatory_25_accreditation or ''"/>
+                        </div>
+
+                        <!-- ================================================= -->
+                        <!-- PART III - DETAILS OF PAYMENT (Items 26–29)       -->
+                        <!-- ================================================= -->
+                        
+                        <!-- ITEM 26 - Cash/Bank Debit Memo (AMOUNT ONLY) -->
+                        <div style="position:absolute; top:1200px; left:687px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_26_amount or 0.0)"/>
+                        </div>
+                        
+                        <!-- ITEM 27 - Check (Bank, Number, Date, Amount) -->
+                        <div style="position:absolute; top:1228px; left:164px; width:180px; font-size:11pt; z-index:1; white-space:nowrap;">
+                            <t t-esc="o.item_27a_bank or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1228px; left:240px; width:150px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:1px;">
+                            <t t-esc="o.item_27b_number or ''"/>
+                        </div>
+                        <!-- 27C - MM/DD -->
+                        <div style="position:absolute; top:1228px; left:420px; width:120px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:15px;">
+                            <t t-esc="o.item_27c_date and o.item_27c_date.strftime('%m%d') or ''"/>
+                        </div>
+                        <!-- 27C - YYYY (ibang letter-spacing) -->
+                        <div style="position:absolute; top:1228px; left:528px; width:80px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:11px;">
+                            <t t-esc="o.item_27c_date and o.item_27c_date.strftime('%Y') or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1228px; left:687px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_27d_amount or 0.0)"/>
+                        </div>
+                        
+                        <!-- ITEM 28 - Tax Debit Memo (Number, Date, Amount — NO BANK) -->
+                        <div style="position:absolute; top:1256px; left:240px; width:150px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:1px;">
+                            <t t-esc="o.item_28a_number or ''"/>
+                        </div>
+                        <!-- 28B - MM/DD -->
+                        <div style="position:absolute; top:1256px; left:420px; width:120px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:15px;">
+                            <t t-esc="o.item_28b_date and o.item_28b_date.strftime('%m%d') or ''"/>
+                        </div>
+                        <!-- 28B - YYYY (ibang letter-spacing) -->
+                        <div style="position:absolute; top:1256px; left:528px; width:80px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:11px;">
+                            <t t-esc="o.item_28b_date and o.item_28b_date.strftime('%Y') or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1256px; left:687px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_28c_amount or 0.0)"/>
+                        </div>
+                        
+                        <!-- ITEM 29 - Others (Bank, Number, Date, Amount) -->
+                        <div style="position:absolute; top:1283px; left:164px; width:180px; font-size:11pt; z-index:1; white-space:nowrap;">
+                            <t t-esc="o.item_29a_bank or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1283px; left:240px; width:150px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:1px;">
+                            <t t-esc="o.item_29b_number or ''"/>
+                        </div>
+                        <!-- 29C - MM/DD -->
+                        <div style="position:absolute; top:1283px; left:420px; width:120px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:15px;">
+                            <t t-esc="o.item_29c_date and o.item_29c_date.strftime('%m%d') or ''"/>
+                        </div>
+                        <!-- 29C - YYYY (ibang letter-spacing) -->
+                        <div style="position:absolute; top:1283px; left:528px; width:80px; font-size:11pt; z-index:1; white-space:nowrap; text-align:center; letter-spacing:11px;">
+                            <t t-esc="o.item_29c_date and o.item_29c_date.strftime('%Y') or ''"/>
+                        </div>
+                        <div style="position:absolute; top:1283px; left:687px; width:180px; font-size:11pt; z-index:1; white-space:nowrap; text-align:right; letter-spacing:1px;">
+                            <t t-esc="'{:,.2f}'.format(o.item_29d_amount or 0.0)"/>
+                        </div>
+
+                        <!-- Machine Validation / Revenue Official Receipt Details -->
+                        <div style="position:absolute; top:1333px; left:60px; width:900px; font-size:11pt; z-index:1; white-space:normal;">
+                            <t t-esc="o.machine_validation_details or ''"/>
+                        </div>
+
+                    </t>
+                </main>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_custom_bir_2550m" model="ir.actions.report">
+        <field name="name">BIR Form 2550M (Overlay)</field>
+        <field name="model">bir.2550m</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">itc_internal_dev.report_bir_2550m_overlay</field>
+        <field name="report_file">itc_internal_dev.report_bir_2550m_overlay</field>
+        <field name="paperformat_id" ref="a4_paperformat_ml"/>
+        <field name="print_report_name">'BIR_2550M_%s' % (object.name)</field>
+    </record>
+
+</odoo>

@@ -19,7 +19,7 @@ class Bir2550mSch1Line(models.Model):
     industry     = fields.Char(string="Industries Covered by VAT", required=True)
     atc          = fields.Char(string="ATC")
     sales_amount = fields.Monetary(string="Amount of Sales/Receipts", currency_field="currency_id")
-    output_tax   = fields.Monetary(string="Output Tax",               currency_field="currency_id",
+    output_tax   = fields.Monetary(string="Output Tax", currency_field="currency_id",
                                    compute="_compute_output_tax", store=True)
     currency_id  = fields.Many2one(related="bir_id.currency_id", store=True)
 
@@ -39,7 +39,7 @@ class Bir2550mSch2Line(models.Model):
     date_purchased  = fields.Date(string="Date Purchased")
     description     = fields.Char(string="Description")
     amount          = fields.Monetary(string="Amount (Net of VAT)", currency_field="currency_id")
-    input_tax       = fields.Monetary(string="Input Tax",           currency_field="currency_id",
+    input_tax       = fields.Monetary(string="Input Tax", currency_field="currency_id",
                                       compute="_compute_input_tax", store=True)
     currency_id     = fields.Many2one(related="bir_id.currency_id", store=True)
 
@@ -56,13 +56,12 @@ class Bir2550mSch3Line(models.Model):
     _order = "date_purchased, id"
 
     bir_id             = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
-    # A) Current Period Purchases
     is_previous_period = fields.Boolean(string="Previous Period", default=False,
                                         help="Check if this is a previous period purchase carried over.")
     date_purchased     = fields.Date(string="Date Purchased")
     description        = fields.Char(string="Description")
     amount             = fields.Monetary(string="Amount (Net of VAT)", currency_field="currency_id")
-    input_tax          = fields.Monetary(string="Input Tax (C×12%)",   currency_field="currency_id",
+    input_tax          = fields.Monetary(string="Input Tax (C×12%)", currency_field="currency_id",
                                          compute="_compute_input_tax", store=True)
     est_life_months    = fields.Integer(string="Est. Life (months)")
     recognized_life    = fields.Integer(string="Recognized Life (months)",
@@ -105,7 +104,7 @@ class Bir2550mSch4Line(models.Model):
     input_tax_direct      = fields.Monetary(string="Input Tax Directly Attributable to Govt Sales",
                                             currency_field="currency_id")
     taxable_sales_govt    = fields.Monetary(string="Taxable Sales to Government", currency_field="currency_id")
-    total_sales           = fields.Monetary(string="Total Sales",                 currency_field="currency_id")
+    total_sales           = fields.Monetary(string="Total Sales", currency_field="currency_id")
     input_tax_not_direct  = fields.Monetary(string="Input Tax Not Directly Attributable",
                                             currency_field="currency_id")
     ratable_portion       = fields.Monetary(string="Ratable Portion",
@@ -116,7 +115,7 @@ class Bir2550mSch4Line(models.Model):
                                             currency_field="currency_id")
     standard_input_tax    = fields.Monetary(string="Less: Standard Input Tax to Govt",
                                             currency_field="currency_id")
-    closed_to_expense     = fields.Monetary(string="Input Tax Closed to Expense (→ Item 20B)",
+    closed_to_expense     = fields.Monetary(string="Input Tax Closed to Expense",
                                             compute="_compute_closed", store=True,
                                             currency_field="currency_id")
     currency_id           = fields.Many2one(related="bir_id.currency_id", store=True)
@@ -151,14 +150,14 @@ class Bir2550mSch5Line(models.Model):
     bir_id               = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
     input_tax_direct     = fields.Monetary(string="Input Tax Directly Attributable to Exempt Sales",
                                            currency_field="currency_id")
-    taxable_exempt_sale  = fields.Monetary(string="Taxable Exempt Sale",           currency_field="currency_id")
-    total_sales          = fields.Monetary(string="Total Sales",                   currency_field="currency_id")
+    taxable_exempt_sale  = fields.Monetary(string="Taxable Exempt Sale", currency_field="currency_id")
+    total_sales          = fields.Monetary(string="Total Sales", currency_field="currency_id")
     input_tax_not_direct = fields.Monetary(string="Input Tax Not Directly Attributable",
                                            currency_field="currency_id")
     ratable_portion      = fields.Monetary(string="Ratable Portion",
                                            compute="_compute_ratable", store=True,
                                            currency_field="currency_id")
-    total_allocable      = fields.Monetary(string="Total Input Tax Allocable to Exempt (→ Item 20C)",
+    total_allocable      = fields.Monetary(string="Total Input Tax Allocable to Exempt",
                                            compute="_compute_total", store=True,
                                            currency_field="currency_id")
     currency_id          = fields.Many2one(related="bir_id.currency_id", store=True)
@@ -188,9 +187,9 @@ class Bir2550mSch6Line(models.Model):
     bir_id              = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
     period_covered      = fields.Char(string="Period Covered")
     withholding_agent   = fields.Char(string="Name of Withholding Agent")
-    income_payment      = fields.Monetary(string="Income Payment",      currency_field="currency_id")
-    total_tax_withheld  = fields.Monetary(string="Total Tax Withheld",  currency_field="currency_id")
-    applied_current_mo  = fields.Monetary(string="Applied - Current Mo.",currency_field="currency_id")
+    income_payment      = fields.Monetary(string="Income Payment", currency_field="currency_id")
+    total_tax_withheld  = fields.Monetary(string="Total Tax Withheld", currency_field="currency_id")
+    applied_current_mo  = fields.Monetary(string="Applied - Current Mo.", currency_field="currency_id")
     currency_id         = fields.Many2one(related="bir_id.currency_id", store=True)
 
 
@@ -203,10 +202,10 @@ class Bir2550mSch7Line(models.Model):
     bir_id             = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
     period_covered     = fields.Char(string="Period Covered")
     miller_name        = fields.Char(string="Name of Miller")
-    taxpayer_name      = fields.Char(string="Name of Taxpayer")
+    taxpayer_name      = fields.Char(string="Taxpayer Name")
     or_number          = fields.Char(string="Official Receipt Number")
-    amount_paid        = fields.Monetary(string="Amount Paid",          currency_field="currency_id")
-    applied_current_mo = fields.Monetary(string="Applied - Current Mo.",currency_field="currency_id")
+    amount_paid        = fields.Monetary(string="Amount Paid", currency_field="currency_id")
+    applied_current_mo = fields.Monetary(string="Applied - Current Mo.", currency_field="currency_id")
     currency_id        = fields.Many2one(related="bir_id.currency_id", store=True)
 
 
@@ -219,9 +218,9 @@ class Bir2550mSch8Line(models.Model):
     bir_id             = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
     period_covered     = fields.Char(string="Period Covered")
     withholding_agent  = fields.Char(string="Name of Withholding Agent")
-    income_payment     = fields.Monetary(string="Income Payment",       currency_field="currency_id")
-    total_tax_withheld = fields.Monetary(string="Total Tax Withheld",   currency_field="currency_id")
-    applied_current_mo = fields.Monetary(string="Applied - Current Mo.",currency_field="currency_id")
+    income_payment     = fields.Monetary(string="Income Payment", currency_field="currency_id")
+    total_tax_withheld = fields.Monetary(string="Total Tax Withheld", currency_field="currency_id")
+    applied_current_mo = fields.Monetary(string="Applied - Current Mo.", currency_field="currency_id")
     currency_id        = fields.Many2one(related="bir_id.currency_id", store=True)
 
 
@@ -234,7 +233,7 @@ class Bir2550M(models.Model):
     _description = "BIR 2550M - Monthly Value-Added Tax Declaration"
     _rec_name    = "display_name"
     _order       = "year desc, month desc, id desc"
-    _inherit     = ["mail.thread", "mail.activity.mixin"]
+    _inherit     = ["mail.thread", "mail.activity.mixin", "bir.hide.fields.mixin"]
 
     # ── Identity ──────────────────────────────────────────
     name = fields.Char(string="Reference", readonly=True, copy=False,
@@ -246,7 +245,7 @@ class Bir2550M(models.Model):
     currency_id = fields.Many2one("res.currency", related="company_id.currency_id",
                                   store=True, readonly=True)
 
-    year  = fields.Integer(string="Year",  required=True,
+    year  = fields.Integer(string="Year", required=True,
                            default=lambda self: date.today().year, tracking=True)
     month = fields.Selection(
         selection=[
@@ -264,12 +263,12 @@ class Bir2550M(models.Model):
     number_of_sheets = fields.Integer(string="Number of Sheets Attached", default=0)
 
     # ── Background Info ────────────────────────────────────
-    tin                = fields.Char(related="company_id.vat",   readonly=True)
+    tin                = fields.Char(related="company_id.vat", readonly=True)
     rdo_code           = fields.Char(string="RDO Code", size=3)
     line_of_business   = fields.Char(string="Line of Business")
-    registered_name    = fields.Char(related="company_id.name",  readonly=True)
+    registered_name    = fields.Char(related="company_id.name", readonly=True)
     telephone_number   = fields.Char(related="company_id.phone", readonly=True)
-    zip_code           = fields.Char(related="company_id.zip",   readonly=True)
+    zip_code           = fields.Char(related="company_id.zip", readonly=True)
     registered_address = fields.Text(compute="_compute_registered_address", store=True)
     has_tax_relief     = fields.Boolean(string="Tax Relief under Special Law/Treaty")
     tax_relief_specify = fields.Char(string="Specify Tax Relief")
@@ -297,136 +296,89 @@ class Bir2550M(models.Model):
     sch7_ids = fields.One2many("bir.2550m.sch7", "bir_id", string="Schedule 7 - Advance Payments")
     sch8_ids = fields.One2many("bir.2550m.sch8", "bir_id", string="Schedule 8 - VAT on Govt Sales")
 
-    # ── Part II Summary Fields (Items 12–26) ──────────────
+    # =====================================================
+    # PART II SUMMARY FIELDS
+    # NOTE: Items 12–17 are driven by sch1_ids (loop in XML).
+    #       Only Items 18–23 are individual fields below.
+    # =====================================================
 
-    # 12: Vatable Sales - Private (auto-filled from Sch 1, also manually editable)
-    item_12a = fields.Monetary(string="12A Vatable Sales - Private",
-                               currency_field="currency_id")
-    item_12b = fields.Monetary(string="12B Output Tax - Vatable Private",
-                               currency_field="currency_id")
+    # ── ITEM 18: Less: Input Taxes ────────────────────────
+    item_18a = fields.Monetary(
+        string="18A Transitional/Presumptive Input Tax",
+        currency_field="currency_id")
+    item_18b = fields.Monetary(
+        string="18B Carried Over from Previous Return Period",
+        currency_field="currency_id")
+    item_18c = fields.Monetary(
+        string="18C On Taxable Goods/Services",
+        currency_field="currency_id")
+    item_18d = fields.Monetary(
+        string="18D Total Available Input Taxes",
+        compute="_compute_item18d", store=True,
+        currency_field="currency_id")
+    item_18e = fields.Monetary(
+        string="18E Less: Any Refund/TCC Claimed",
+        currency_field="currency_id")
+    item_18f = fields.Monetary(
+        string="18F Net Creditable Input Tax",
+        compute="_compute_item18f", store=True,
+        currency_field="currency_id")
 
-    # 13: Sales to Government
-    item_13a = fields.Monetary(string="13A Sales to Government", currency_field="currency_id")
-    item_13b = fields.Monetary(string="13B Output Tax - Govt (12%)",
-                               compute="_compute_output_taxes", store=True,
-                               currency_field="currency_id")
+    # ── ITEM 19: VAT Payable (Excess Input Tax) ───────────
+    item_19 = fields.Monetary(
+        string="19 VAT Payable (Excess Input Tax)",
+        compute="_compute_item19", store=True,
+        currency_field="currency_id")
 
-    # 14, 15: Zero Rated, Exempt (manual)
-    item_14  = fields.Monetary(string="14 Zero Rated Sales/Receipts", currency_field="currency_id")
-    item_15  = fields.Monetary(string="15 Exempt Sales/Receipts",     currency_field="currency_id")
+    # ── ITEM 20: Less: Tax Credits/Payments ───────────────
+    item_20a = fields.Monetary(
+        string="20A Advance Payments",
+        currency_field="currency_id")
+    item_20b = fields.Monetary(
+        string="20B Creditable Value-added Tax Withheld",
+        currency_field="currency_id")
+    item_20c = fields.Monetary(
+        string="20C VAT Paid in Return Previously Filed",
+        currency_field="currency_id")
+    item_20d = fields.Monetary(
+        string="20D Total Tax Credits/Payments",
+        compute="_compute_item20d", store=True,
+        currency_field="currency_id")
 
-    # 16: Totals
-    item_16a = fields.Monetary(string="16A Total Sales/Receipts",
-                               compute="_compute_totals", store=True, currency_field="currency_id")
-    item_16b = fields.Monetary(string="16B Total Output Tax Due",
-                               compute="_compute_totals", store=True, currency_field="currency_id")
+    # ── ITEM 21: Tax Payable/(Overpayment) ────────────────
+    item_21 = fields.Monetary(
+        string="21 Tax Payable/(Overpayment)",
+        compute="_compute_item21", store=True,
+        currency_field="currency_id")
 
-    # 17: Input Tax Carryover
-    item_17a = fields.Monetary(string="17A Input Tax Carried Over from Previous Period",
-                               currency_field="currency_id")
-    item_17b = fields.Monetary(string="17B Input Tax Deferred on Capital Goods > ₱1M (Prev Period)",
-                               currency_field="currency_id")
-    item_17c = fields.Monetary(string="17C Transitional Input Tax",  currency_field="currency_id")
-    item_17d = fields.Monetary(string="17D Presumptive Input Tax",   currency_field="currency_id")
-    item_17e = fields.Monetary(string="17E Others (Carryover)",      currency_field="currency_id")
-    item_17f = fields.Monetary(string="17F Total Input Tax Carryover",
-                               compute="_compute_input_totals", store=True,
-                               currency_field="currency_id")
+    # ── ITEM 22: Penalties ────────────────────────────────
+    item_22a = fields.Monetary(
+        string="22A Surcharge",
+        currency_field="currency_id")
+    item_22b = fields.Monetary(
+        string="22B Interest",
+        currency_field="currency_id")
+    item_22c = fields.Monetary(
+        string="22C Compromise",
+        currency_field="currency_id")
+    item_22d = fields.Monetary(
+        string="22D Total Penalties",
+        compute="_compute_item22d", store=True,
+        currency_field="currency_id")
 
-    # 18: Current Purchases (auto-filled from schedules, also manually editable)
-    item_18a = fields.Monetary(string="18A Capital Goods ≤ ₱1M - Purchases (Sch.2)",
-                               currency_field="currency_id")
-    item_18b = fields.Monetary(string="18B Capital Goods ≤ ₱1M - Input Tax (Sch.2)",
-                               currency_field="currency_id")
-    item_18c = fields.Monetary(string="18C Capital Goods > ₱1M - Purchases (Sch.3)",
-                               currency_field="currency_id")
-    item_18d = fields.Monetary(string="18D Capital Goods > ₱1M - Allowable Input Tax (Sch.3)",
-                               currency_field="currency_id")
-    item_18e = fields.Monetary(string="18E Domestic Purchases of Goods (Non-Capital)",
-                               currency_field="currency_id")
-    item_18f = fields.Monetary(string="18F Input Tax - Domestic Goods (Non-Capital)",
-                               currency_field="currency_id")
-    item_18g = fields.Monetary(string="18G Importation of Goods (Non-Capital)",
-                               currency_field="currency_id")
-    item_18h = fields.Monetary(string="18H Input Tax - Importation",
-                               currency_field="currency_id")
-    item_18i = fields.Monetary(string="18I Domestic Purchase of Services",
-                               currency_field="currency_id")
-    item_18j = fields.Monetary(string="18J Input Tax - Domestic Services",
-                               currency_field="currency_id")
-    item_18k = fields.Monetary(string="18K Services by Non-Residents",
-                               currency_field="currency_id")
-    item_18l = fields.Monetary(string="18L Input Tax - Non-Resident Services",
-                               currency_field="currency_id")
-    item_18m = fields.Monetary(string="18M Purchases Not Qualified for Input Tax",
-                               currency_field="currency_id")
-    item_18n = fields.Monetary(string="18N Others (Purchases)",      currency_field="currency_id")
-    item_18o = fields.Monetary(string="18O Input Tax - Others",      currency_field="currency_id")
-    item_18p = fields.Monetary(string="18P Total Current Purchases",
-                               compute="_compute_input_totals", store=True,
-                               currency_field="currency_id")
-
-    # 19: Total Available Input Tax
-    item_19  = fields.Monetary(string="19 Total Available Input Tax",
-                               compute="_compute_input_totals", store=True,
-                               currency_field="currency_id")
-
-    # 20: Deductions from Input Tax (from schedules)
-    item_20a = fields.Monetary(string="20A Input Tax on Capital Goods > ₱1M Deferred (Sch.3)",
-                               currency_field="currency_id")
-    item_20b = fields.Monetary(string="20B Input Tax on Sale to Govt Closed to Expense (Sch.4)",
-                               currency_field="currency_id")
-    item_20c = fields.Monetary(string="20C Input Tax Allocable to Exempt Sales (Sch.5)",
-                               currency_field="currency_id")
-    item_20d = fields.Monetary(string="20D VAT Refund/TCC Claimed",  currency_field="currency_id")
-    item_20e = fields.Monetary(string="20E Others (Input Tax Deductions)", currency_field="currency_id")
-    item_20f = fields.Monetary(string="20F Total Deductions from Input Tax",
-                               compute="_compute_vat_payable", store=True,
-                               currency_field="currency_id")
-
-    # 21, 22
-    item_21  = fields.Monetary(string="21 Total Allowable Input Tax (19 less 20F)",
-                               compute="_compute_vat_payable", store=True,
-                               currency_field="currency_id")
-    item_22  = fields.Monetary(string="22 Net VAT Payable (16B less 21)",
-                               compute="_compute_vat_payable", store=True,
-                               currency_field="currency_id")
-
-    # 23: Tax Credits (from schedules)
-    item_23a = fields.Monetary(string="23A Creditable VAT Withheld (Sch.6)",
-                               currency_field="currency_id")
-    item_23b = fields.Monetary(string="23B Advance Payments - Sugar/Flour (Sch.7)",
-                               currency_field="currency_id")
-    item_23c = fields.Monetary(string="23C VAT Withheld on Govt Sales (Sch.8)",
-                               currency_field="currency_id")
-    item_23d = fields.Monetary(string="23D VAT Paid in Previously Filed Amended Return",
-                               currency_field="currency_id")
-    item_23e = fields.Monetary(string="23E Advance Payments (BIR Form 0605)",
-                               currency_field="currency_id")
-    item_23f = fields.Monetary(string="23F Others (Tax Credits)",    currency_field="currency_id")
-    item_23g = fields.Monetary(string="23G Total Tax Credits/Payments",
-                               compute="_compute_vat_payable", store=True,
-                               currency_field="currency_id")
-
-    # 24, 25, 26
-    item_24  = fields.Monetary(string="24 Tax Still Payable/(Overpayment)",
-                               compute="_compute_vat_payable", store=True,
-                               currency_field="currency_id")
-    item_25a = fields.Monetary(string="25A Surcharge",  currency_field="currency_id")
-    item_25b = fields.Monetary(string="25B Interest",   currency_field="currency_id")
-    item_25c = fields.Monetary(string="25C Compromise", currency_field="currency_id")
-    item_25d = fields.Monetary(string="25D Total Penalties",
-                               compute="_compute_vat_payable", store=True,
-                               currency_field="currency_id")
-    item_26  = fields.Monetary(string="26 Total Amount Payable/(Overpayment)",
-                               compute="_compute_vat_payable", store=True,
-                               currency_field="currency_id")
+    # ── ITEM 23: Total Amount Payable/(Overpayment) ───────
+    item_23 = fields.Monetary(
+        string="23 Total Amount Payable/(Overpayment)",
+        compute="_compute_item23", store=True,
+        currency_field="currency_id")
 
     # ── Payment Details ────────────────────────────────────
     payment_method = fields.Selection(
         selection=[
-            ("cash","29 Cash/Bank Debit Memo"), ("check","30 Check"),
-            ("tax_debit","31 Tax Debit Memo"),  ("others","32 Others"),
+            ("cash", "Cash/Bank Debit Memo"),
+            ("check", "Check"),
+            ("tax_debit", "Tax Debit Memo"),
+            ("others", "Others"),
         ], string="Payment Method")
     payment_bank   = fields.Char(string="Drawee Bank/Agency")
     payment_number = fields.Char(string="Payment Number")
@@ -436,7 +388,70 @@ class Bir2550M(models.Model):
     notes = fields.Text(string="Internal Notes")
 
     # =====================================================
-    # COMPUTES
+    # DECLARATION (Items 24–25)
+    # =====================================================
+
+    # ITEM 24 - President/VP/Authorized Representative/Tax Agent
+    signatory_24_name  = fields.Char(string="24 Name of Signatory")
+    signatory_24_title = fields.Char(string="24 Title/Position of Signatory")
+    signatory_24_tin   = fields.Char(string="24 TIN of Tax Agent (if applicable)")
+
+    # ITEM 25 - Treasurer/Asst. Treasurer/Authorized Representative
+    signatory_25_name  = fields.Char(string="25 Name of Signatory")
+    signatory_25_title = fields.Char(string="25 Title/Position of Signatory")
+    signatory_25_accreditation = fields.Char(
+        string="25 Tax Agent Accreditation No./Date of Accreditation (if applicable)")
+
+    # =====================================================
+    # PART III - DETAILS OF PAYMENT (Items 26–29)
+    # =====================================================
+
+    # ITEM 26 - Cash/Bank Debit Memo (AMOUNT ONLY)
+    item_26_amount = fields.Monetary(string="26 Amount", currency_field="currency_id")
+
+    # ITEM 27 - Check (Bank, Number, Date, Amount)
+    item_27a_bank   = fields.Char(string="27A Drawee Bank/Agency")
+    item_27b_number = fields.Char(string="27B Number")
+    item_27c_date   = fields.Date(string="27C Date")
+    item_27d_amount = fields.Monetary(string="27D Amount", currency_field="currency_id")
+
+    # ITEM 28 - Tax Debit Memo (Number, Date, Amount — NO BANK)
+    item_28a_number = fields.Char(string="28A Number")
+    item_28b_date   = fields.Date(string="28B Date")
+    item_28c_amount = fields.Monetary(string="28C Amount", currency_field="currency_id")
+
+    # ITEM 29 - Others (Bank, Number, Date, Amount)
+    item_29a_bank   = fields.Char(string="29A Drawee Bank/Agency")
+    item_29b_number = fields.Char(string="29B Number")
+    item_29c_date   = fields.Date(string="29C Date")
+    item_29d_amount = fields.Monetary(string="29D Amount", currency_field="currency_id")
+
+    # Machine Validation / Revenue Official Receipt Details
+    machine_validation_details = fields.Text(
+        string="Machine Validation/Revenue Official Receipt Details (If not filed with the bank)")
+
+    # Stamp of Receiving Office
+    receiving_office_stamp = fields.Text(string="Stamp of Receiving Office and Date of Receipt")
+
+    # =====================================================
+    # REPORT ACTIONS
+    # =====================================================
+
+    def action_generate_pdf(self):
+        self.ensure_one()
+        return self.env.ref('itc_internal_dev.action_report_custom_bir_2550m').report_action(self)
+
+    def _get_pdf_filename(self):
+        self.ensure_one()
+        return 'BIR_2550M.pdf'
+
+    def _generate_pdf_bytes(self):
+        self.ensure_one()
+        report = self.env.ref('itc_internal_dev.action_report_custom_bir_2550m')
+        return self.env['ir.actions.report']._render_qweb_pdf(report.id, [self.id])[0]
+
+    # =====================================================
+    # COMPUTES - HEADER
     # =====================================================
 
     @api.depends("year", "month")
@@ -472,77 +487,66 @@ class Bir2550M(models.Model):
             ])
             rec.registered_address = ", ".join(parts)
 
+    # =====================================================
+    # COMPUTES - ITEMS 18 to 23
+    # =====================================================
+
+    @api.depends("item_18a", "item_18b", "item_18c")
+    def _compute_item18d(self):
+        for rec in self:
+            rec.item_18d = rec.item_18a + rec.item_18b + rec.item_18c
+
+    @api.depends("item_18d", "item_18e")
+    def _compute_item18f(self):
+        for rec in self:
+            rec.item_18f = rec.item_18d - rec.item_18e
+
+    @api.depends("item_18f", "sch1_ids.output_tax")
+    def _compute_item19(self):
+        """
+        Item 19 = Item 17B (Total Tax Due) less Item 18F (Net Creditable Input Tax)
+        Item 17B = sum of sch1_ids.output_tax (the loop in XML).
+        """
+        for rec in self:
+            total_tax_due = sum(rec.sch1_ids.mapped("output_tax")) or 0.0
+            rec.item_19 = total_tax_due - rec.item_18f
+
+    @api.depends("item_20a", "item_20b", "item_20c")
+    def _compute_item20d(self):
+        for rec in self:
+            rec.item_20d = rec.item_20a + rec.item_20b + rec.item_20c
+
+    @api.depends("item_19", "item_20d")
+    def _compute_item21(self):
+        for rec in self:
+            rec.item_21 = rec.item_19 - rec.item_20d
+
+    @api.depends("item_22a", "item_22b", "item_22c")
+    def _compute_item22d(self):
+        for rec in self:
+            rec.item_22d = rec.item_22a + rec.item_22b + rec.item_22c
+
+    @api.depends("item_21", "item_22d")
+    def _compute_item23(self):
+        for rec in self:
+            rec.item_23 = rec.item_21 + rec.item_22d
+
+    # =====================================================
+    # SYNC FROM SCHEDULES
+    # =====================================================
+
     def _sync_from_schedules(self):
         """
-        Push schedule totals into the Part II summary fields.
-        Called explicitly after schedule lines change (not a stored compute)
-        so the summary fields remain manually editable on Page 1.
-        Accountants can override any value after syncing.
+        Push schedule totals into Part II summary fields.
+        Items 12–17 are driven by sch1_ids (loop in XML), so no sync needed.
+        Items 20A–20C pull from Sch 7, 6, 8 respectively.
         """
         for rec in self:
-            current_sch3 = rec.sch3_ids.filtered(lambda l: not l.is_previous_period)
             rec.write({
-                "item_12a": sum(rec.sch1_ids.mapped("sales_amount")),
-                "item_12b": sum(rec.sch1_ids.mapped("output_tax")),
-                "item_18a": sum(rec.sch2_ids.mapped("amount")),
-                "item_18b": sum(rec.sch2_ids.mapped("input_tax")),
-                "item_18c": sum(current_sch3.mapped("amount")),
-                "item_18d": sum(rec.sch3_ids.mapped("allowable_input_tax")),
-                "item_20a": sum(rec.sch3_ids.mapped("balance_input_tax")),
-                "item_20b": sum(rec.sch4_ids.mapped("closed_to_expense")),
-                "item_20c": sum(rec.sch5_ids.mapped("total_allocable")),
-                "item_23a": sum(rec.sch6_ids.mapped("applied_current_mo")),
-                "item_23b": sum(rec.sch7_ids.mapped("applied_current_mo")),
-                "item_23c": sum(rec.sch8_ids.mapped("applied_current_mo")),
+                "item_20a": sum(rec.sch7_ids.mapped("applied_current_mo")),
+                "item_20b": sum(rec.sch6_ids.mapped("applied_current_mo")),
+                "item_20c": sum(rec.sch8_ids.mapped("applied_current_mo")),
             })
-
-    @api.depends("item_13a")
-    def _compute_output_taxes(self):
-        for rec in self:
-            rec.item_13b = round(rec.item_13a * 0.12, 2)
-
-    @api.depends("item_12a", "item_12b", "item_13a", "item_13b", "item_14", "item_15")
-    def _compute_totals(self):
-        for rec in self:
-            rec.item_16a = rec.item_12a + rec.item_13a + rec.item_14 + rec.item_15
-            rec.item_16b = rec.item_12b + rec.item_13b
-
-    @api.depends(
-        "item_17a", "item_17b", "item_17c", "item_17d", "item_17e",
-        "item_18a", "item_18b", "item_18c", "item_18d",
-        "item_18e", "item_18f", "item_18g", "item_18h",
-        "item_18i", "item_18j", "item_18k", "item_18l",
-        "item_18m", "item_18n", "item_18o",
-    )
-    def _compute_input_totals(self):
-        for rec in self:
-            rec.item_17f = (rec.item_17a + rec.item_17b + rec.item_17c
-                            + rec.item_17d + rec.item_17e)
-            rec.item_18p = (rec.item_18a + rec.item_18c + rec.item_18e
-                            + rec.item_18g + rec.item_18i + rec.item_18k
-                            + rec.item_18m + rec.item_18n)
-            rec.item_19  = (rec.item_17f
-                            + rec.item_18b + rec.item_18d + rec.item_18f
-                            + rec.item_18h + rec.item_18j + rec.item_18l
-                            + rec.item_18o)
-
-    @api.depends(
-        "item_19", "item_16b",
-        "item_20a", "item_20b", "item_20c", "item_20d", "item_20e",
-        "item_23a", "item_23b", "item_23c", "item_23d", "item_23e", "item_23f",
-        "item_25a", "item_25b", "item_25c",
-    )
-    def _compute_vat_payable(self):
-        for rec in self:
-            rec.item_20f = (rec.item_20a + rec.item_20b + rec.item_20c
-                            + rec.item_20d + rec.item_20e)
-            rec.item_21  = max(rec.item_19 - rec.item_20f, 0.0)
-            rec.item_22  = rec.item_16b - rec.item_21
-            rec.item_23g = (rec.item_23a + rec.item_23b + rec.item_23c
-                            + rec.item_23d + rec.item_23e + rec.item_23f)
-            rec.item_24  = rec.item_22 - rec.item_23g
-            rec.item_25d = rec.item_25a + rec.item_25b + rec.item_25c
-            rec.item_26  = rec.item_24 + rec.item_25d
 
     # =====================================================
     # CONSTRAINTS
@@ -580,8 +584,7 @@ class Bir2550M(models.Model):
     def action_generate_data(self):
         """
         Auto-generate Sch 1 (Vatable Sales) and Sch 2 (Capital Goods ≤ ₱1M)
-        from posted journal entries. Uses credit-only on income accounts and
-        debit-only on expense/asset accounts — same pattern as 1601-E.
+        from posted journal entries.
         """
         for rec in self:
             if rec.state not in ("draft", "generated"):
@@ -604,10 +607,8 @@ class Bir2550M(models.Model):
                 ("credit", ">", 0),
             ])
 
-            # Clear and recreate Sch 1
             rec.sch1_ids.unlink()
             if sales_lines:
-                # Group by account for summary lines
                 from collections import defaultdict
                 by_account = defaultdict(float)
                 for sl in sales_lines:
@@ -626,7 +627,6 @@ class Bir2550M(models.Model):
                     self.env["bir.2550m.sch1"].create(sch1_vals)
 
             # ── Capital Goods Purchases → Sch 2 ──
-            # Find asset accounts with 'equipment', 'furniture', 'machinery', or 'capital'
             capital_accounts = self.env["account.account"].search([
                 ("account_type", "in", ["asset_fixed", "asset_non_current"]),
             ])
@@ -653,7 +653,6 @@ class Bir2550M(models.Model):
                 if sch2_vals:
                     self.env["bir.2550m.sch2"].create(sch2_vals)
 
-            # Push schedule totals into Part II summary fields
             rec._sync_from_schedules()
 
             rec.state = "generated"
@@ -662,38 +661,12 @@ class Bir2550M(models.Model):
                     f"Data generated for {rec._get_month_name()} {rec.year}. "
                     f"Sch 1: {len(rec.sch1_ids)} line(s). "
                     f"Sch 2: {len(rec.sch2_ids)} line(s). "
-                    "Part II summary fields updated from schedules. "
                     "Please review and fill in Schedules 3–8 manually."
                 )
             )
 
     def action_sync_from_schedules(self):
-        """
-        Manually push all schedule totals into Part II summary fields.
-        Use this after editing schedules to update the summary without
-        re-generating all data from journal entries.
-        """
-        for rec in self:
-            if rec.state in ("confirmed", "filed", "cancelled"):
-                raise UserError("Cannot sync a Confirmed, Filed, or Cancelled return.")
-        self._sync_from_schedules()
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": "Schedules Synced",
-                "message": "Part II summary fields have been updated from schedule totals.",
-                "type": "success",
-                "sticky": False,
-            }
-        }
-
-    def action_sync_from_schedules(self):
-        """
-        Manually push all schedule totals into Part II summary fields.
-        Use after editing schedules to update the summary without
-        re-generating from journal entries.
-        """
+        """Manually push schedule totals into Part II summary fields."""
         for rec in self:
             if rec.state in ("confirmed", "filed", "cancelled"):
                 raise UserError("Cannot sync a Confirmed, Filed, or Cancelled return.")
@@ -714,10 +687,8 @@ class Bir2550M(models.Model):
             if rec.state != "generated":
                 raise UserError("Only a Generated return can be confirmed.")
             if rec.name == "New":
-                rec.name = (
-                    self.env["ir.sequence"].next_by_code("bir.2550m") or "New"
-                )
-            rec.state        = "confirmed"
+                rec.name = self.env["ir.sequence"].next_by_code("bir.2550m") or "New"
+            rec.state          = "confirmed"
             rec.date_confirmed = date.today()
             rec.confirmed_by   = self.env.user
             rec.message_post(body=f"Return confirmed by {self.env.user.name}. Reference: {rec.name}")
