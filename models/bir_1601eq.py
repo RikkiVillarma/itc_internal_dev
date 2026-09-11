@@ -393,8 +393,8 @@ class Bir1601EQ(models.Model):
         if not value or value == 0:
             return ''
         
-        amt_str = f'{abs(value):,.2f}'
-        digits = amt_str.replace(',', '')
+        amt_str = f'{abs(value) :,.2f}'
+        digits = amt_str.replace(',', '').replace('.', ' ')
         
         char_count = len(digits)
         if value < 0:
@@ -443,49 +443,27 @@ class Bir1601EQ(models.Model):
         """
         if not value or value == 0:
             return ''
-        
-        amt_str = f'{abs(value):,.2f}'
-        digits = amt_str.replace(',', '')
-        
-        char_count = len(digits)
-        if value < 0:
-            char_count += 1
-        
-        spaces_between = char_count - 1
-        total_len = char_count + spaces_between
-        
-        if value < 0:
-            total_len += 1
-        
-        if total_len < max_width:
-            leading_spaces = max_width - total_len
-        else:
-            leading_spaces = 0
-        
-        char_list = list(digits)
-        spaced_parts = []
-        total_digits = len(char_list)
-        
-        # Normal amount spacing: 4 spaces between characters
-        adjust_from_right = [2, 5, 8, 11]  # 9th and 12th from right
-        
-        for i, char in enumerate(char_list):
-            pos_from_right = total_digits - 1 - i
-            
-            if i == 0:
-                spaced_parts.append(char)
-            elif pos_from_right in adjust_from_right:
-                spaced_parts.append('   ' + char)  # 3 spaces (bawas)
-            else:
-                spaced_parts.append('    ' + char)  # 4 spaces (normal)
-        
-        spaced = ''.join(spaced_parts)
-        
-        if value < 0:
-            spaced = f'- {spaced}'
-        
-        result = '  ' * leading_spaces + spaced + '  '
-        
+
+        value = self._fmt_amt(value).replace(',', '').replace('.', ' ')
+
+        decimal = value[-3:]       # 00
+        units = value[-6:-3]       # 000
+        thousand = value[-9:-6]    # 000
+        million = value[-12:-9]    # 000
+        billion = value[:-12]      # 100
+
+        result = (
+            '    '.join(billion)
+            + '  '
+            + '    '.join(million)
+            + '   '
+            + '    '.join(thousand)
+            + '   '
+            + '    '.join(units)
+            + '     '
+            + '    '.join(decimal)
+        ) + '  '
+
         return result
 
     def _fmt_box_payment(self, value, max_width=18, char_spacing=3, right_padding=2):
@@ -544,7 +522,7 @@ class Bir1601EQ(models.Model):
         seg2 = digits[3:6]    # 3 digits before second /
         seg3 = digits[6:9]    # 3 digits before third /
         seg4 = digits[9:]     # branch code (up to 5 digits)
-        return f'{seg1} {seg2} {seg3} {seg4}'
+        return f'{seg1}  {seg2}  {seg3}  {seg4}'
 
     # ========================================================
     # PDF FIELD MAP
@@ -583,33 +561,33 @@ class Bir1601EQ(models.Model):
 
             # Item 1 – For the Year
             # P1 | y=827 | x=30
-            'Text1': str(self.year) if self.year else '',
+            'Text1': ' ' + '    '.join(str(self.year) if self.year else ''),
 
             # Item 2 – Quarter checkboxes (enter 'X' to mark)
             # P1 | y=823 | x=118  → 1st Quarter
-            'Text2': 'X' if self.quarter == '1' else '',
+            'Text2': ' ' + 'X' if self.quarter == '1' else '',
             # P1 | y=822 | x=162  → 2nd Quarter
-            'Text3': 'X' if self.quarter == '2' else '',
+            'Text3': ' ' + 'X' if self.quarter == '2' else '',
             # P1 | y=822 | x=204  → 3rd Quarter
-            'Text4': 'X' if self.quarter == '3' else '',
+            'Text4': ' ' + 'X' if self.quarter == '3' else '',
             # P1 | y=823 | x=248  → 4th Quarter
-            'Text5': 'X' if self.quarter == '4' else '',
+            'Text5': ' ' + 'X' if self.quarter == '4' else '',
 
             # Item 3 – Amended Return? (enter 'X' to mark)
             # P1 | y=822 | x=306  → Yes
-            'Text6': 'X' if self.is_amended else '',
+            'Text6': ' ' + 'X' if self.is_amended else '',
             # P1 | y=822 | x=349  → No
-            'Text7': '' if self.is_amended else 'X',
+            'Text7': ' ' + '' if self.is_amended else 'X',
 
             # Item 4 – Any Taxes Withheld? (enter 'X' to mark)
             # P1 | y=822 | x=407  → Yes
-            'Text8': 'X' if self.any_taxes_withheld else '',
+            'Text8': ' ' + 'X' if self.any_taxes_withheld else '',
             # P1 | y=822 | x=450  → No
-            'Text9': '' if self.any_taxes_withheld else 'X',
+            'Text9': ' ' + '' if self.any_taxes_withheld else 'X',
 
             # Item 5 – No. of Sheet/s Attached
             # P1 | y=827 | x=522
-            'Text10': str(self.no_of_sheets) if self.no_of_sheets else '',
+            'Text10': '  ' + str(self.no_of_sheets) if self.no_of_sheets else '',
 
             # ==============================================================
             # PAGE 1 – PART I: BACKGROUND INFORMATION
@@ -618,45 +596,45 @@ class Bir1601EQ(models.Model):
             # Item 6 – Taxpayer Identification Number (TIN)
             # P1 | y=793 | x=233
             
-            'Text11': self._format_tin_for_pdf(self.tin),
+            'Text11': '  ' + '   '.join(self._format_tin_for_pdf(self.tin)),
 
             # Item 7 – RDO Code
             # P1 | y=792 | x=548
-            'Text12': self.rdo_code or '',
+            'Text12': '   ' + '    '.join((self.rdo_code) if self.rdo_code else ''),
 
             # Item 8 – Withholding Agent's Name
             # P1 | y=763 | x=18
-            'Text13': self.withholding_agent_name or '',
+            'Text13': ' ' + (self.withholding_agent_name or ''),
 
             # Item 9 – Registered Address (line 1: street)
             # P1 | y=737 | x=18
-            'Text14': self.registered_address or '',
+            'Text14': ' ' + (self.registered_address or ''),
 
             # Item 9 – Registered Address (line 2: city/state)
             # P1 | y=719 | x=18
-            'Text15': (self.company_id.city or '') + (
+            'Text15': ' ' + (self.company_id.city or '') + (
                 f', {self.company_id.state_id.name}' if self.company_id.state_id else ''
             ),
 
             # Item 9A – ZIP Code
             # P1 | y=719 | x=533
-            'Text16': self.zip_code or '',
+            'Text16': ' ' + (self.zip_code or ''),
 
             # Item 10 – Contact Number
             # P1 | y=702 | x=104
-            'Text17': self.contact_number or '',
+            'Text17': ' ' + (self.contact_number or ''),
 
             # Item 11 – Category of Withholding Agent: Private (enter 'X')
             # P1 | y=699 | x=446
-            'Text19': 'X' if self.category == 'private' else '',
+            'Text19': ' ' + 'X' if self.category == 'private' else '',
 
             # Item 11 – Category of Withholding Agent: Government (enter 'X')
             # P1 | y=698 | x=520
-            'Text20': 'X' if self.category == 'government' else '',
+            'Text20': ' ' + 'X' if self.category == 'government' else '',
 
             # Item 12 – Email Address
             # P1 | y=685 | x=104
-            'Text18': self.email or '',
+            'Text18': ' ' + (self.email or ''),
 
             # ==============================================================
             # PAGE 1 – PART II: COMPUTATION OF TAX
@@ -917,7 +895,7 @@ class Bir1601EQ(models.Model):
 
         # 4. Fill field values across pages
         for page in writer.pages:
-            writer.update_page_form_field_values(page, field_map, auto_regenerate=False)
+            writer.update_page_form_field_values(page, field_map)
 
         # 5. Output buffer & attachment creation
         buf = BytesIO()

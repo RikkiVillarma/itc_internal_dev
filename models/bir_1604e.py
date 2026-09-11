@@ -364,6 +364,17 @@ class BIR1604E(models.Model):
             return ''
         return f'{value:,.2f}'
 
+    def _format_contact_for_pdf(self, phone):
+        digits = (phone or '').replace('-', '').replace(' ', '').replace('(', '').replace(')', '')
+
+        return (
+            '   '.join(digits[:3])
+            + '     '
+            + '   '.join(digits[3:6])
+            + '     '
+            + '   '.join(digits[6:])
+        ) + '  '
+
     def _build_pdf_field_map(self):
 
         self.ensure_one()
@@ -383,12 +394,12 @@ class BIR1604E(models.Model):
                 '   '.join(tin_clean[i:i+3])
                 for i in range(0, 9, 3)
             ) + '           ' + '   '.join(tin_clean[9:]),
-            'Text167':  ' '+'   '.join(self.rdo_code or ''),
+            'Text167':  '  '+'    '.join(self.rdo_code or ''),
             'Text1':    '  ' + (c.name or ''),
             'Text2':    '  ' + (c.street or '') + (' ' + (c.street2 or '') if c.street2 else ''),
             'Text3':    '  ' + (c.city or '') + (f', {c.state_id.name}' if c.state_id else ''),
             'Text7':    '    '.join(c.zip or ''),
-            'Text6':    '  ' + (c.phone or ''),
+            'Text6':    '  ' + self._format_contact_for_pdf(c.phone),
             'Text8':    '  ' + (c.email or ''),
 
             # Schedule 1 – Quarterly
@@ -640,7 +651,7 @@ class BIR1604E(models.Model):
                             obj[NameObject('/MK')] = new_mk
 
         for page in writer.pages:
-            writer.update_page_form_field_values(page, field_map, auto_regenerate=False)
+            writer.update_page_form_field_values(page, field_map)
 
         buf = io.BytesIO()
         writer.write(buf)
