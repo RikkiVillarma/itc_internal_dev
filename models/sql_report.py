@@ -676,143 +676,153 @@ SQL_QUERIES = {
         ORDER BY sm.date;
         """,
         'vat_summary_purchase': """
-        SELECT
-            am.name AS "SEQUENCE NUMBER",
-            rp.vat AS "TAX PAYER IDENTIFICATION NUMBER",
-            rp.name AS "REGISTERED NAME",
-            -- Supplier Name: LAST, FIRST, MIDDLE (adjust fields if you have them in partner)
-        ''
-                AS "NAME OF SUPPLIER(LAST NAME, FIRST NAME, MIDDLE NAME)",
-            rp.contact_address_complete AS "SUPPLIER ADDRESS",
-
-            -- Amounts
-            am.amount_untaxed + am.amount_tax AS "AMOUNT OF GROSS PURCHASE",
-            0.0 AS "AMOUNT OF EXEMPT PURCHASE",       -- placeholder
-            0.0 AS "AMOUNT OF ZERO RATED PURCHASE",   -- placeholder
-            am.amount_untaxed AS "AMOUNT OF TAXABLE PURCHASE",
-
-            -- Purchase types (you may need custom fields or tags to separate these)
-            0.0 AS "AMOUNT OF PURCHASE OF SERVICES",           -- placeholder
-            0.0 AS "AMOUNT OF PURCHASE OF CAPITAL GOODS",     -- placeholder
-            0.0 AS "AMOUNT OF PURCHASE OF OTHER THAN CAPITAL GOODS", -- placeholder
-
-            -- VAT
-            am.amount_tax AS "AMOUNT OF INPUT TAX",
-
-            -- Gross taxable purchase (for VAT computation)
-            am.amount_untaxed AS "AMOUNT OF GROSS TAXABLE PURCHASE"
-
-        FROM account_move am
-        LEFT JOIN res_partner rp ON am.partner_id = rp.id
-        WHERE am.move_type = 'in_invoice'
-        AND am.state = 'posted'
-        ORDER BY am.invoice_date, am.name;
-
+            WITH params AS (
+                SELECT %s::date AS date_from, %s::date AS date_to
+            ),
+            hdr AS (
+                SELECT am.id, am.partner_id,
+                    am.amount_untaxed + am.amount_tax AS gross_purchase,
+                    am.amount_tax AS input_tax,
+                    am.amount_untaxed AS taxable_purchase
+                FROM account_move am
+                CROSS JOIN params p
+                WHERE am.move_type = 'in_invoice' AND am.state = 'posted'
+                AND am.invoice_date BETWEEN p.date_from AND p.date_to
+            )
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ NO",
+                rp.vat AS "TAX PAYER IDENTIFICATION NUMBER",
+                rp.name AS "REGISTERED NAME",
+                '' AS "NAME OF SUPPLIER (LAST NAME, FIRST NAME, MIDDLE NAME)",
+                rp.contact_address_complete AS "SUPPLIER ADDRESS",
+                hdr.gross_purchase AS "AMOUNT OF GROSS PURCHASE",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%46E%%' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF EXEMPT PURCHASE",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%46ZR%%' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF ZERO-RATED PURCHASE",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%42A%%' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF TAXABLE PURCHASE",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%42A%%' AND pt.type = 'service' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF PURCHASE OF SERVICES",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%42A%%' AND (aa.code_store->>'1') IN ('1101','1102','1103','1104','1105') THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF PURCHASE OF CAPITAL GOODS",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%42A%%' AND pt.type != 'service' AND (aa.code_store->>'1') NOT IN ('1101','1102','1103','1104','1105') THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF PURCHASE OF GOODS OTHER THAN CAPITAL GOODS",
+                hdr.input_tax AS "AMOUNT OF INPUT TAX",
+                hdr.taxable_purchase AS "AMOUNT OF GROSS TAXABLE PURCHASE"
+            FROM hdr
+            LEFT JOIN account_move am ON am.id = hdr.id
+            LEFT JOIN res_partner rp ON am.partner_id = rp.id
+            LEFT JOIN account_move_line l ON l.move_id = am.id AND l.product_id IS NOT NULL
+            LEFT JOIN product_product pp ON l.product_id = pp.id
+            LEFT JOIN product_template pt ON pp.product_tmpl_id = pt.id
+            LEFT JOIN account_account aa ON l.account_id = aa.id
+            LEFT JOIN account_account_tag_account_move_line_rel tagrel ON tagrel.account_move_line_id = l.id
+            LEFT JOIN account_account_tag tag ON tag.id = tagrel.account_account_tag_id
+            GROUP BY rp.id, rp.name, rp.vat, rp.contact_address_complete, hdr.gross_purchase, hdr.input_tax, hdr.taxable_purchase
+            ORDER BY rp.name;
         """,
         'vat_summary_sales': """
-        SELECT
-            TO_CHAR(am.invoice_date, 'MM/YYYY') AS "TAXABLE MONTH",
-            rp.vat AS "TAX PAYER IDENTIFICATION NUMBER",
-            rp.name AS "REGISTERED NAME",
-            -- Customer Name: LAST, FIRST, MIDDLE (adjust fields if available)
-        ''
-                AS "NAME OF CUSTOMER",
-            rp.contact_address_complete AS "CUSTOMER ADDRESS",
-
-            -- Amounts
-            am.amount_untaxed + am.amount_tax AS "AMOUNT OF GROSS SALES",
-            0.0 AS "AMOUNT OF EXEMPT SALES",       -- placeholder, requires exemption logic
-            0.0 AS "AMOUNT OF ZERO RATED SALES",   -- placeholder, requires zero-rated logic
-            am.amount_untaxed AS "AMOUNT OF TAXABLE SALES",
-            am.amount_tax AS "AMOUNT OF OUTPUT TAX",
-            am.amount_untaxed AS "AMOUNT OF GROSS TAXABLE SALES"
-
-        FROM account_move am
-        LEFT JOIN res_partner rp ON am.partner_id = rp.id
-        WHERE am.move_type = 'out_invoice'
-        AND am.state = 'posted'
-        ORDER BY am.invoice_date, am.name;
-
+            WITH params AS (
+                SELECT %s::date AS date_from, %s::date AS date_to
+            ),
+            hdr AS (
+                SELECT am.id, am.partner_id,
+                    am.amount_untaxed + am.amount_tax AS gross_sales,
+                    am.amount_tax AS output_tax,
+                    am.amount_untaxed AS taxable_sales
+                FROM account_move am
+                CROSS JOIN params p
+                WHERE am.move_type = 'out_invoice' AND am.state = 'posted'
+                AND am.invoice_date BETWEEN p.date_from AND p.date_to
+            )
+            SELECT
+                TO_CHAR(am.invoice_date, 'MM/YYYY') AS "TAXABLE MONTH",
+                rp.vat AS "TAX PAYER IDENTIFICATION NUMBER",
+                rp.name AS "REGISTERED NAME",
+                '' AS "NAME OF CUSTOMER",
+                rp.contact_address_complete AS "CUSTOMER ADDRESS",
+                hdr.gross_sales AS "AMOUNT OF GROSS SALES",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%34A%%' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF EXEMPT SALES",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%33A%%' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF ZERO RATED SALES",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%31A%%' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF TAXABLE SALES - PRIVATE",
+                SUM(CASE WHEN tag.name->>'en_US' ILIKE '%%32A%%' THEN l.price_subtotal ELSE 0 END) AS "AMOUNT OF TAXABLE SALES - GOVERNMENT",
+                hdr.output_tax AS "AMOUNT OF OUTPUT TAX",
+                hdr.taxable_sales AS "AMOUNT OF GROSS TAXABLE SALES"
+            FROM hdr
+            LEFT JOIN account_move am ON am.id = hdr.id
+            LEFT JOIN res_partner rp ON am.partner_id = rp.id
+            LEFT JOIN account_move_line l ON l.move_id = am.id AND l.product_id IS NOT NULL
+            LEFT JOIN account_account_tag_account_move_line_rel tagrel ON tagrel.account_move_line_id = l.id
+            LEFT JOIN account_account_tag tag ON tag.id = tagrel.account_account_tag_id
+            GROUP BY am.invoice_date, rp.id, rp.name, rp.vat, rp.contact_address_complete, hdr.gross_sales, hdr.output_tax, hdr.taxable_sales
+            ORDER BY am.invoice_date, rp.name;
         """,
         'semestral_suppliers': """
-        WITH supplier_invoices AS (
+            WITH params AS (
+                SELECT %s::date AS date_from, %s::date AS date_to
+            )
             SELECT
-                p.id AS partner_id,
-                p.vat AS tax_payer_id,
-                p.branch_code AS branch_code,
-                '' AS corporation,
-                p.name AS last_name,          -- assuming single name field
-                '' AS first_name,             -- if you have separate first name
-                '' AS middle_name,            -- optional
-                '' AS atc_code,
-                l.debit AS amount_of_income_payment,
-                t.amount AS tax_rate,
-                l.tax_line_id AS tax_line_id,
-                l.credit AS amount_of_tax_withheld,
-                am.date AS invoice_date
-            FROM account_move_line l
-            JOIN account_move am ON l.move_id = am.id
-            JOIN res_partner p ON am.partner_id = p.id
-            LEFT JOIN account_tax t ON l.tax_line_id = t.id
-            WHERE am.move_type = 'in_invoice'  -- supplier invoices
+                ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ NO",
+                rp.vat AS "TAX PAYER IDENTIFICATION NUMBER",
+                '00000' AS "BRANCH CODE",
+                CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "CORPORATION",
+                CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "LAST NAME",
+                '' AS "FIRST NAME",
+                '' AS "MIDDLE NAME",
+                UPPER(
+                    REGEXP_REPLACE(
+                        COALESCE(
+                            NULLIF(SUBSTRING(at.description->>'en_US' FROM 'W[CI]\\s*[0-9]+'), ''),
+                            SUBSTRING(at.name->>'en_US' FROM 'W[CI]\\s*[0-9]+')
+                        ),
+                        '\\s+', '', 'g'
+                    )
+                ) AS "ATC CODE",
+                SUM(aml.tax_base_amount) AS "AMOUNT OF INCOME PAYMENT",
+                CONCAT(ABS(at.amount)::numeric(10,2), '%%') AS "TAX RATE",
+                SUM(ABS(aml.credit - aml.debit)) AS "AMOUNT OF TAX WITHHELD"
+            FROM account_move_line aml
+            JOIN account_move am ON am.id = aml.move_id
+            JOIN account_tax at ON aml.tax_line_id = at.id
+            JOIN res_partner rp ON am.partner_id = rp.id
+            CROSS JOIN params p
+            WHERE am.move_type IN ('in_invoice', 'in_refund')
             AND am.state = 'posted'
-        )
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY invoice_date) AS sequence_number,
-            tax_payer_id AS "TAX PAYER IDENTIFICATION NUMBER",
-            branch_code AS "BRANCH CODE",
-            corporation AS "CORPORATION",
-            last_name AS "LAST NAME",
-            first_name AS "FIRST NAME",
-            middle_name AS "MIDDLE NAME",
-            atc_code AS "ATC CODE",
-            amount_of_income_payment AS "AMOUNT OF INCOME PAYMENT",
-            tax_rate AS "TAX RATE",
-            amount_of_tax_withheld AS "AMOUNT OF TAX WITHHELD"
-        FROM supplier_invoices
-        WHERE invoice_date >= date_trunc('year', CURRENT_DATE) 
-        AND invoice_date < date_trunc('month', CURRENT_DATE) - INTERVAL '6 months'  -- last 6 months
-        ORDER BY invoice_date;
-
+            AND at.type_tax_use = 'purchase'
+            AND at.amount < 0
+            AND am.invoice_date BETWEEN p.date_from AND p.date_to
+            GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
+            ORDER BY rp.name;
         """,
         'map_summary': """
-        WITH invoice_data AS (
+            WITH params AS (
+                SELECT %s::date AS date_from, %s::date AS date_to
+            )
             SELECT
-                ROW_NUMBER() OVER (ORDER BY am.id) AS sequence_number,
-                rp.vat AS taxpayer_identification_number,
-                CASE WHEN rp.is_company THEN aml.debit ELSE 0 END AS corporation,
-                CASE WHEN NOT rp.is_company THEN aml.debit ELSE 0 END AS individual,
-                '' AS atc_code,
-                atc.name->>'en_US' AS nature_of_payment,
-                aml.debit AS amount_of_income_payment,
-                '' AS tax_rate,
-                aml.credit AS amount_of_tax_withheld
+                ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ",
+                rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
+                CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "CORPORATION",
+                CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "INDIVIDUAL",
+                UPPER(
+                    REGEXP_REPLACE(
+                        COALESCE(
+                            NULLIF(SUBSTRING(at.description->>'en_US' FROM 'W[CI]\\s*[0-9]+'), ''),
+                            SUBSTRING(at.name->>'en_US' FROM 'W[CI]\\s*[0-9]+')
+                        ),
+                        '\\s+', '', 'g'
+                    )
+                ) AS "ATC CODE",
+                NULLIF(TRIM(REGEXP_REPLACE(at.description->>'en_US', '<[^>]+>', '', 'g')), '') AS "NATURE OF PAYMENT",
+                SUM(aml.tax_base_amount) AS "AMOUNT OF INCOME PAYMENT",
+                CONCAT(ABS(at.amount)::numeric(10,2), '%%') AS "TAX RATE",
+                SUM(ABS(aml.credit - aml.debit)) AS "AMOUNT OF TAX WITHHELD"
             FROM account_move_line aml
-            JOIN account_move am ON aml.move_id = am.id
+            JOIN account_move am ON am.id = aml.move_id
+            JOIN account_tax at ON aml.tax_line_id = at.id
             JOIN res_partner rp ON am.partner_id = rp.id
-            LEFT JOIN account_tax atc ON aml.tax_line_id = atc.id
-            WHERE am.move_type IN ('out_invoice', 'out_refund') -- customer invoices
+            CROSS JOIN params p
+            WHERE am.move_type IN ('in_invoice', 'in_refund')
             AND am.state = 'posted'
-        )
-        SELECT
-            sequence_number,
-            taxpayer_identification_number,
-            SUM(corporation) AS corporation,
-            SUM(individual) AS individual,
-            atc_code,
-            nature_of_payment,
-            SUM(amount_of_income_payment) AS amount_of_income_payment,
-            tax_rate,
-            SUM(amount_of_tax_withheld) AS amount_of_tax_withheld
-        FROM invoice_data
-        GROUP BY
-            sequence_number,
-            taxpayer_identification_number,
-            atc_code,
-            nature_of_payment,
-            tax_rate
-        ORDER BY sequence_number;
-
+            AND at.type_tax_use = 'purchase'
+            AND at.amount < 0
+            AND am.invoice_date BETWEEN p.date_from AND p.date_to
+            GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
+            ORDER BY rp.name;
         """,
         'general_ledger': """
         SELECT
@@ -836,7 +846,7 @@ SQL_QUERIES = {
         WHERE am.state = 'posted'
         ORDER BY aa.id, aml.id;
         """,
-        'sawt': """
+    'sawt': """
         WITH params AS (
             SELECT %s::date AS date_from, %s::date AS date_to
         )
@@ -846,10 +856,18 @@ SQL_QUERIES = {
             rp.name AS "REGISTERED NAME",
             p.date_from AS "RETURN PERIOD FROM",
             p.date_to AS "RETURN PERIOD TO",
-            UPPER(SUBSTRING(at.name->>'en_US' FROM 'W[CI][0-9]+')) AS "ATC CODE",
-            '' AS "NATURE OF INCOME PAYMENT",
+            UPPER(
+                REGEXP_REPLACE(
+                    COALESCE(
+                        NULLIF(SUBSTRING(at.description->>'en_US' FROM 'W[CI]\\s*[0-9]+'), ''),
+                        SUBSTRING(at.name->>'en_US' FROM 'W[CI]\\s*[0-9]+')
+                    ),
+                    '\\s+', '', 'g'
+                )
+            ) AS "ATC CODE",
+            NULLIF(TRIM(REGEXP_REPLACE(at.description->>'en_US', '<[^>]+>', '', 'g')), '') AS "NATURE OF INCOME PAYMENT",
             SUM(aml.tax_base_amount) AS "AMOUNT",
-            CONCAT(ABS(at.amount), '%%') AS "TAX RATE",
+            CONCAT(ABS(at.amount)::numeric(10,2), '%%') AS "TAX RATE",
             SUM(aml.credit - aml.debit) AS "TAX WITHHELD"
         FROM account_move_line aml
         JOIN account_move am ON am.id = aml.move_id
@@ -861,7 +879,7 @@ SQL_QUERIES = {
         AND at.type_tax_use = 'sale'
         AND at.amount < 0
         AND am.invoice_date BETWEEN p.date_from AND p.date_to
-        GROUP BY rp.name, rp.vat, at.name, at.amount, p.date_from, p.date_to
+        GROUP BY rp.name, rp.vat, at.name, at.description, at.amount, p.date_from, p.date_to
         ORDER BY rp.name;
     """,
     'qap_summary': """
@@ -884,16 +902,24 @@ SQL_QUERIES = {
             rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
             CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "CORPORATION",
             CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "INDIVIDUAL",
-            UPPER(SUBSTRING(at.name->>'en_US' FROM 'W[CI][0-9]+')) AS "ATC CODE",
-            '' AS "NATURE OF PAYMENT",
+            UPPER(
+                REGEXP_REPLACE(
+                    COALESCE(
+                        NULLIF(SUBSTRING(at.description->>'en_US' FROM 'W[CI]\\s*[0-9]+'), ''),
+                        SUBSTRING(at.name->>'en_US' FROM 'W[CI]\\s*[0-9]+')
+                    ),
+                    '\\s+', '', 'g'
+                )
+            ) AS "ATC CODE",
+            NULLIF(TRIM(REGEXP_REPLACE(at.description->>'en_US', '<[^>]+>', '', 'g')), '') AS "NATURE OF PAYMENT",
             SUM(CASE WHEN am.invoice_date BETWEEN b.m1_start AND b.m1_end THEN aml.tax_base_amount ELSE 0 END) AS "AMOUNT OF INCOME PAYMENT M1",
-            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m1_start AND b.m1_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount) END AS "TAX RATE M1",
+            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m1_start AND b.m1_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount)::numeric(10,2) || '%%' END AS "TAX RATE M1",
             SUM(CASE WHEN am.invoice_date BETWEEN b.m1_start AND b.m1_end THEN ABS(aml.credit - aml.debit) ELSE 0 END) AS "TAX WITHHELD M1",
             SUM(CASE WHEN am.invoice_date BETWEEN b.m2_start AND b.m2_end THEN aml.tax_base_amount ELSE 0 END) AS "AMOUNT OF INCOME PAYMENT M2",
-            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m2_start AND b.m2_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount) END AS "TAX RATE M2",
+            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m2_start AND b.m2_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount)::numeric(10,2) || '%%' END AS "TAX RATE M2",
             SUM(CASE WHEN am.invoice_date BETWEEN b.m2_start AND b.m2_end THEN ABS(aml.credit - aml.debit) ELSE 0 END) AS "TAX WITHHELD M2",
             SUM(CASE WHEN am.invoice_date BETWEEN b.m3_start AND b.m3_end THEN aml.tax_base_amount ELSE 0 END) AS "AMOUNT OF INCOME PAYMENT M3",
-            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m3_start AND b.m3_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount) END AS "TAX RATE M3",
+            CASE WHEN SUM(CASE WHEN am.invoice_date BETWEEN b.m3_start AND b.m3_end THEN aml.tax_base_amount ELSE 0 END) <> 0 THEN ABS(at.amount)::numeric(10,2) || '%%' END AS "TAX RATE M3",
             SUM(CASE WHEN am.invoice_date BETWEEN b.m3_start AND b.m3_end THEN ABS(aml.credit - aml.debit) ELSE 0 END) AS "TAX WITHHELD M3",
             SUM(aml.tax_base_amount) AS "TOTAL INCOME PAYMENT",
             SUM(ABS(aml.credit - aml.debit)) AS "TOTAL TAX WITHHELD"
@@ -907,7 +933,41 @@ SQL_QUERIES = {
         AND at.type_tax_use = 'purchase'
         AND at.amount < 0
         AND am.invoice_date BETWEEN b.date_from AND b.date_to
-        GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.amount
+        GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
+        ORDER BY rp.name;
+    """,
+    'form_1604e': """
+        WITH params AS (
+            SELECT %s::date AS date_from, %s::date AS date_to
+        )
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ",
+            rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
+            CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "REGISTERED NAME",
+            CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "NAME OF PAYEES",
+            UPPER(
+                REGEXP_REPLACE(
+                    COALESCE(
+                        NULLIF(SUBSTRING(at.description->>'en_US' FROM 'W[CI]\\s*[0-9]+'), ''),
+                        SUBSTRING(at.name->>'en_US' FROM 'W[CI]\\s*[0-9]+')
+                    ),
+                    '\\s+', '', 'g'
+                )
+            ) AS "ATC CODE",
+            SUM(aml.tax_base_amount) AS "AMOUNT OF INCOME PAYMENT",
+            CONCAT(ABS(at.amount)::numeric(10,2), '%%') AS "RATE OF TAX",
+            SUM(ABS(aml.credit - aml.debit)) AS "AMOUNT OF TAX WITHHELD"
+        FROM account_move_line aml
+        JOIN account_move am ON am.id = aml.move_id
+        JOIN account_tax at ON aml.tax_line_id = at.id
+        JOIN res_partner rp ON am.partner_id = rp.id
+        CROSS JOIN params p
+        WHERE am.move_type IN ('in_invoice', 'in_refund')
+        AND am.state = 'posted'
+        AND at.type_tax_use = 'purchase'
+        AND at.amount < 0
+        AND am.invoice_date BETWEEN p.date_from AND p.date_to
+        GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
         ORDER BY rp.name;
     """,
 }
@@ -1077,8 +1137,9 @@ class SqlReport(models.Model):
             table_html = f"""
                 <div  class="o_sql_report_result" style="
                     width: 100%;
-                    max-width: 1000px;
+                    max-width: 100%;
                     max-height: 600px;
+                    overflow-x: auto;
                     overflow-y: auto;
                     border: 1px solid #ccc;
                     border-radius: 6px;
