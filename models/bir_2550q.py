@@ -1,3 +1,4 @@
+import json
 import re
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
@@ -337,7 +338,7 @@ class Bir2550Q(models.Model):
     # ====================================================================
     # Generate data from posted journal entries + account.payment
     # ====================================================================
-    def action_generate_data(self):
+    def _action_generate_data_legacy_direct(self):
         for rec in self:
             if not rec.return_period_from or not rec.return_period_to:
                 rec._onchange_quarter_year()
@@ -463,6 +464,83 @@ class Bir2550Q(models.Model):
                 'creditable_vat_withheld':  creditable_vat_withheld,
                 'advance_vat_payments':     advance_vat_payments,
                 'vat_paid_prev_return_18':  vat_paid_prev_return,
+            })
+
+    # ====================================================================
+    # Generate data from already-generated Reporting VAT summaries
+    # ====================================================================
+    def _get_generated_report_rows(self, report_name):
+        """Read the JSON behind the VAT report table displayed in Reporting."""
+        self.ensure_one()
+        report = self.env['custom.sql.report'].search([
+            ('name', '=', report_name),
+            ('from_date', '=', self.return_period_from),
+            ('to_date', '=', self.return_period_to),
+        ], order='generated_on desc, id desc', limit=1)
+        if not report or not report.result_ids:
+            report_label = {
+                'vat_summary_sales': 'VAT Summary List - Sales',
+                'vat_summary_purchase': 'VAT Summary List - Purchase',
+            }.get(report_name, report_name)
+            raise UserError(_(
+                'Generate %(report)s in Reporting first for %(date_from)s to %(date_to)s.'
+            ) % {
+                'report': report_label,
+                'date_from': self.return_period_from,
+                'date_to': self.return_period_to,
+            })
+
+        rows = []
+        for line in report.result_ids:
+            try:
+                rows.extend(json.loads(line.data or '[]'))
+            except (TypeError, ValueError):
+                raise UserError(_('The generated %(report)s result is not valid JSON.') % {
+                    'report': report.display_name,
+                })
+        return rows
+
+    @staticmethod
+    def _sum_report_column(rows, column):
+        """Sum the formatted numeric values stored by custom.sql.report.line."""
+        total = 0.0
+        for row in rows:
+            value = row.get(column, 0) or 0
+            try:
+                total += float(str(value).replace(',', '').strip() or 0)
+            except (TypeError, ValueError):
+                raise UserError(_(
+                    'Report column %(column)s contains a non-numeric value: %(value)s'
+                ) % {'column': column, 'value': value})
+        return total
+
+    def action_generate_data(self):
+        """Populate existing 2550Q fields from generated Reporting VAT summaries."""
+        for rec in self:
+            if not rec.return_period_from or not rec.return_period_to:
+                rec._onchange_quarter_year()
+            if not rec.return_period_from or not rec.return_period_to:
+                raise UserError(_('Please set the Year Ended and Quarter first.'))
+
+            sales_rows = rec._get_generated_report_rows('vat_summary_sales')
+            purchase_rows = rec._get_generated_report_rows('vat_summary_purchase')
+
+            taxable_purchases = rec._sum_report_column(
+                purchase_rows, 'AMOUNT OF TAXABLE PURCHASE'
+            )
+            input_tax = rec._sum_report_column(purchase_rows, 'AMOUNT OF INPUT TAX')
+            rec.write({
+                'vatable_sales': (
+                    rec._sum_report_column(sales_rows, 'AMOUNT OF TAXABLE SALES - PRIVATE')
+                    + rec._sum_report_column(sales_rows, 'AMOUNT OF TAXABLE SALES - GOVERNMENT')
+                ),
+                'output_tax_31b': rec._sum_report_column(sales_rows, 'AMOUNT OF OUTPUT TAX'),
+                'zero_rated_sales': rec._sum_report_column(sales_rows, 'AMOUNT OF ZERO RATED SALES'),
+                'exempt_sales': rec._sum_report_column(sales_rows, 'AMOUNT OF EXEMPT SALES'),
+                'domestic_purchases_44a': taxable_purchases,
+                'domestic_input_tax_44b': input_tax,
+                'total_current_purchases': taxable_purchases,
+                'total_current_input_tax': input_tax,
             })
 
     # ====================================================================
@@ -731,7 +809,7 @@ class Bir2550Q(models.Model):
             # Text26 (x=323, y=381) → Signature area – For Non-Individual
             'Text26':self.for_non_individuals or ' ',
             # Text27 (x=148, y=325) → Tax Agent Accreditation No. / Attorney's Roll No.
-            'Text27': ' ' + self.tax_accreditation_no or ' ',
+            'Text27': ' ' + (self.tax_accreditation_no or ''),
             # Text80 (x=347, y=325) → Date of Issue (MM/DD/YYYY)
             'Text80': ' ' + self.date_of_issue.strftime('%m/%d/%Y') if self.date_of_issue else '',
             # Text81 (x=506, y=325) → Expiry Date (MM/DD/YYYY)
@@ -740,13 +818,13 @@ class Bir2550Q(models.Model):
             # ── Part III – Details of Payment ─────────────────────────────
 
             # Row 27 – Cash/Bank Debit Advice
-            'Text30': ' ' + self.cash_bank_drawee or '',
+            'Text30': ' ' + (self.cash_bank_drawee or ''),
             'Text83': self._format_number_for_pdf(self.cash_bank_number),
             'Text86': self._format_date_for_pdf(self.cash_bank_date),
             'Text89': amt(self.cash_bank_amount),
 
             # Row 28 – Check
-            'Text82': ' ' + self.check_drawee or '',
+            'Text82': ' ' + (self.check_drawee or ''),
             'Text84': self._format_number_for_pdf(self.check_number),
             'Text87': self._format_date_for_pdf(self.check_date),
             'Text90': amt(self.check_amount),
@@ -757,8 +835,8 @@ class Bir2550Q(models.Model):
             'Text91': amt(self.tdm_amount),
 
             # Row 30 – Others (Specify below)
-            'Text97': ' ' + self.others_particulars or '',
-            'Text96': ' ' + self.others_drawee or '',
+            'Text97': ' ' + (self.others_particulars or ''),
+            'Text96': ' ' + (self.others_drawee or ''),
             'Text95': self._format_number_for_pdf(self.others_number),
             'Text94': self._format_date_for_pdf(self.others_date) if self.others_date else '',
             'Text92': amt(self.others_amount),
@@ -884,10 +962,10 @@ class Bir2550Q(models.Model):
             'Text136': ' ' + self.capital_goods_date_1.strftime('%m/%d/%Y') if self.capital_goods_date_1 else '',
 
             # Text138 (x=79)  → (B) Source Code (D=Domestic, I=Importation)
-            'Text138': ' ' + self.capital_goods_source_1 or '',
+            'Text138': ' ' + (self.capital_goods_source_1 or ''),
 
             # Text140 (x=112) → (C) Description
-            'Text140': ' ' + self.capital_goods_description_1 or '',
+            'Text140': ' ' + (self.capital_goods_description_1 or ''),
 
             # Text142 (x=187) → (D) Amount of Purchases/Importation of Capital Goods >P1M
             'Text142': ' ' + self._fmt_amt(self.capital_goods_amount_1),
@@ -912,9 +990,9 @@ class Bir2550Q(models.Model):
             # Text137 (x=23)  → (A) Date
             'Text137': ' ' + self.capital_goods_date_2.strftime('%m/%d/%Y') if self.capital_goods_date_2 else '',
             # Text139 (x=79)  → (B) Source Code
-            'Text139': ' ' + self.capital_goods_source_2 or '',
+            'Text139': ' ' + (self.capital_goods_source_2 or ''),
             # Text141 (x=112) → (C) Description
-            'Text141': ' ' + self.capital_goods_description_2 or '',
+            'Text141': ' ' + (self.capital_goods_description_2 or ''),
             # Text143 (x=187) → (D) Amount
             'Text143': ' ' + self._fmt_amt(self.capital_goods_amount_2),
             # Text145 (x=269) → (E) Balance of Input Tax
@@ -945,9 +1023,9 @@ class Bir2550Q(models.Model):
             # ── Part V – Schedule 3: Creditable VAT Withheld ──────────────
             # Row 1 (y=165):
             # Text158 (x=23)  → (A) Period Covered
-            'Text158': ' ' + self.creditable_vat_period_1 or '',
+            'Text158': ' ' + (self.creditable_vat_period_1 or ''),
             # Text159 (x=108) → (B) Name of Withholding Agent
-            'Text159': ' ' + self.creditable_vat_agent_1 or '',
+            'Text159': ' ' + (self.creditable_vat_agent_1 or ''),
             # Text162 (x=390) → (C) Income Payment
             'Text162': ' ' + self._fmt_amt(self.creditable_vat_income_1),
             # Text164 (x=503) → (D) Total Tax Withheld
@@ -955,9 +1033,9 @@ class Bir2550Q(models.Model):
 
             # Row 2 (y=156):
             # Text160 (x=23)  → (A) Period Covered
-            'Text160': ' ' + self.creditable_vat_period_2 or '',
+            'Text160': ' ' + (self.creditable_vat_period_2 or ''),
             # Text161 (x=108) → (B) Name of Withholding Agent
-            'Text161': ' ' + self.creditable_vat_agent_2 or '',
+            'Text161': ' ' + (self.creditable_vat_agent_2 or ''),
             # Text163 (x=390) → (C) Income Payment
             'Text163': ' ' + self._fmt_amt(self.creditable_vat_income_2),
             # Text174 (x=502) → (D) Total Tax Withheld
@@ -975,23 +1053,23 @@ class Bir2550Q(models.Model):
             # ── Part V – Schedule 4: Advance VAT Payment ──────────────────
             # Row 1 (y=118):
             # Text171 (x=23)  → (A) Period Covered
-            'Text171': ' ' + self.advance_vat_period_1 or '',
+            'Text171': ' ' + (self.advance_vat_period_1 or ''),
             # Text169 (x=108) → (B) Name of Miller
-            'Text169': ' ' + self.advance_vat_miller_1 or '',
+            'Text169': ' ' + (self.advance_vat_miller_1 or ''),
             # Text167 (x=255) → (C) Name of Taxpayer
-            'Text167': ' ' + self.advance_vat_taxpayer_1 or '',
+            'Text167': ' ' + (self.advance_vat_taxpayer_1 or ''),
             # Text176 (x=503) → (E) Amount Paid
             'Text176': ' ' + self._fmt_amt(self.advance_vat_amount_1),
 
             # Row 2 (y=108):
             # Text172 (x=23)  → (A) Period Covered
-            'Text172': ' ' + self.advance_vat_period_2 or '',
+            'Text172': ' ' + (self.advance_vat_period_2 or ''),
             # Text170 (x=108) → (B) Name of Miller
-            'Text170': ' ' + self.advance_vat_miller_2 or '',
+            'Text170': ' ' + (self.advance_vat_miller_2 or ''),
             # Text168 (x=255) → (C) Name of Taxpayer
-            'Text168': ' ' + self.advance_vat_taxpayer_2 or '',
+            'Text168': ' ' + (self.advance_vat_taxpayer_2 or ''),
             # Text166 (x=390) → (D) Official Receipt Number
-            'Text166': ' ' + self.advance_vat_or_number_2 or '',
+            'Text166': ' ' + (self.advance_vat_or_number_2 or ''),
             # Text177 (x=503) → (E) Amount Paid row 2
             'Text177': ' ' + self._fmt_amt(self.advance_vat_amount_2),
 
