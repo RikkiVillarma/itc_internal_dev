@@ -24,11 +24,11 @@
   </record>
 
   <!-- Purchase Journal Menu Item -->
-  <menuitem id="menu_purchase_journal"
+  <!-- <menuitem id="menu_purchase_journal"
             name="Purchase Journal"
             parent="account.menu_finance_reports"
             action="action_purchase_journal_wizard"
-            sequence="121"/>
+            sequence="121"/> -->
 
   <!-- Purchase Subsidiary Journal Action -->
   <record id="action_purchase_subsidiary_journal_wizard" model="ir.actions.act_window">
@@ -56,13 +56,13 @@
   </record>
 
   <!-- Sales Journal Menu -->
-  <menuitem
+  <!-- <menuitem
       id="menu_sales_journal"
       name="Sales Journal"
       parent="account.menu_finance_reports"
       action="action_sales_journal_wizard"
       sequence="123"
-  />
+  /> -->
 
   <!-- Sales Subsidiary Journal Action -->
   <record id="action_sales_subsidiary_journal_wizard" model="ir.actions.act_window">
