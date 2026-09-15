@@ -150,7 +150,9 @@ SQL_QUERIES = {
         FROM account_move a
         LEFT JOIN res_partner r 
             ON a.partner_id = r.id
-        WHERE a.state = 'posted' and a.invoice_date BETWEEN %s AND %s;
+        WHERE a.move_type = 'out_invoice'
+            AND a.state = 'posted'
+            AND a.invoice_date BETWEEN %s AND %s
     """,
     'purchase_subsidiary_journal_rr9': """ 
         select 
@@ -171,95 +173,121 @@ SQL_QUERIES = {
         """,
         'purchase_journal': """
             SELECT
-        a.invoice_date AS "TRANSACTION DATE",
-        a.name AS "AP NUMBER",
-        '' AS "DV NUMBER",
-        '' AS "OTHERS",
-        r.name AS "NAME OF PAYEE/SUPPLIER",
-        r.contact_address_complete AS "ADDRESS",
-        r.vat AS "TIN",
-        a.invoice_date AS "REF DATE",
-        a.name AS "PRIMARY",
-        '' AS "SUPPLEMENTARY",
-        '' AS "OTHERS",
-        a.amount_total AS "GROSS AMOUNT",
-        a.amount_tax AS "ACTUAL INPUT TAX 12%%",
-        a.amount_untaxed AS "NET OF VAT",
+                a.invoice_date AS "TRANSACTION DATE",
+                a.name AS "AP NUMBER",
+                '' AS "DV NUMBER",
+                '' AS "OTHERS",
+                r.name AS "NAME OF PAYEE/SUPPLIER",
+                r.contact_address_complete AS "ADDRESS",
+                r.vat AS "TIN",
+                a.invoice_date AS "REF DATE",
+                a.name AS "PRIMARY",
+                '' AS "SUPPLEMENTARY",
+                '' AS "OTHERS",
+                a.amount_total AS "GROSS AMOUNT",
+                a.amount_tax AS "ACTUAL INPUT TAX 12%%",
+                a.amount_untaxed AS "NET OF VAT",
 
-        SUM(
-            CASE 
-                WHEN l.product_id IS NOT NULL 
-                    AND l.account_id IS NOT NULL 
-                    AND l.price_subtotal <= 1000000 THEN l.price_subtotal
-                ELSE 0
-            END
-        ) AS "CAPITAL GOODS (AGGREGATE NOT EXCEEDING 1M)",
+                SUM(
+                    CASE
+                        WHEN l.product_id IS NOT NULL
+                            AND l.account_id IS NOT NULL
+                            AND l.price_subtotal <= 1000000
+                        THEN l.price_subtotal
+                        ELSE 0
+                    END
+                ) AS "CAPITAL GOODS (AGGREGATE NOT EXCEEDING 1M)",
 
-        SUM(
-            CASE 
-                WHEN l.product_id IS NOT NULL 
-                    AND l.account_id IS NOT NULL 
-                    AND l.price_subtotal > 1000000 THEN l.price_subtotal
-                ELSE 0
-            END
-        ) AS "CAPITAL GOODS (AGGREGATE EXCEEDING 1M)",
+                SUM(
+                    CASE
+                        WHEN l.product_id IS NOT NULL
+                            AND l.account_id IS NOT NULL
+                            AND l.price_subtotal > 1000000
+                        THEN l.price_subtotal
+                        ELSE 0
+                    END
+                ) AS "CAPITAL GOODS (AGGREGATE EXCEEDING 1M)",
 
-        SUM(
-            CASE
-                WHEN l.product_id IS NOT NULL AND l.account_id IS NULL AND pt.type='cosu' THEN l.price_subtotal
-                ELSE 0
-            END
-        ) AS "PURCHASE OTHER THAN CAPITAL GOODS",
+                SUM(
+                    CASE
+                        WHEN l.product_id IS NOT NULL
+                            AND l.account_id IS NULL
+                            AND pt.type = 'consu'
+                        THEN l.price_subtotal
+                        ELSE 0
+                    END
+                ) AS "PURCHASE OTHER THAN CAPITAL GOODS",
 
-        SUM(
-            CASE
-                WHEN l.product_id IS NOT NULL AND pt.type='service' AND a.partner_id IS NOT NULL THEN l.price_subtotal
-                ELSE 0
-            END
-        ) AS "DOMESTIC PURCHASE OF SERVICES",
+                SUM(
+                    CASE
+                        WHEN l.product_id IS NOT NULL
+                            AND pt.type = 'service'
+                            AND a.partner_id IS NOT NULL
+                        THEN l.price_subtotal
+                        ELSE 0
+                    END
+                ) AS "DOMESTIC PURCHASE OF SERVICES",
 
-        SUM(
-            CASE
-                WHEN l.is_imported = TRUE THEN l.price_subtotal
-                ELSE 0
-            END
-        ) AS "IMPORTATION PURCHASES",
+                SUM(
+                    CASE
+                        WHEN l.is_imported = TRUE
+                        THEN l.price_subtotal
+                        ELSE 0
+                    END
+                ) AS "IMPORTATION PURCHASES",
 
-        SUM(
-            CASE
-                WHEN t.amount = 0 THEN l.price_subtotal
-                ELSE 0
-            END
-        ) AS "PURCHASE NOT QUALIFIED TO INPUT TAX",
+                SUM(
+                    CASE
+                        WHEN t.amount = 0
+                        THEN l.price_subtotal
+                        ELSE 0
+                    END
+                ) AS "PURCHASE NOT QUALIFIED TO INPUT TAX",
 
-        SUM(
-            CASE
-                WHEN l.product_id IS NULL THEN a.amount_total
-                ELSE 0
-            END
-        ) AS "OTHERS",
+                SUM(
+                    CASE
+                        WHEN l.product_id IS NULL
+                        THEN a.amount_total
+                        ELSE 0
+                    END
+                ) AS "OTHERS",
 
-        '' AS "ACCOUNT TITLE",
-        '' AS "ATC",
-        '' AS "RATE",
-        '' AS "AMOUNT",
-        '' AS "ALLOWED INPUT TAX",
-        '' AS "DISALLOWED INPUT TAX",
-        '' AS "DEFERRED INPUT TAX"
+                '' AS "ACCOUNT TITLE",
+                '' AS "ATC",
+                '' AS "RATE",
+                '' AS "AMOUNT",
+                '' AS "ALLOWED INPUT TAX",
+                '' AS "DISALLOWED INPUT TAX",
+                '' AS "DEFERRED INPUT TAX"
 
-        FROM account_move a
-        LEFT JOIN account_move_line l ON a.id = l.move_id
-        left join product_product pp on l.product_id = pp.id 
-        left join product_template pt on pp.product_tmpl_id = pt.id
-        LEFT JOIN res_partner r ON a.partner_id = r.id
-        LEFT JOIN account_move_line_account_tax_rel rel ON l.id = rel.account_move_line_id
-        LEFT JOIN account_tax t ON rel.account_tax_id = t.id
-        WHERE a.move_type in ('in_invoice', 'entry')
-        and a.state = 'posted'
-        AND a.invoice_date BETWEEN %s AND %s
-        GROUP BY a.id, r.name, r.contact_address_complete, r.vat
-        ORDER BY a.invoice_date;
-    """,
+            FROM account_move a
+            LEFT JOIN account_move_line l
+                ON a.id = l.move_id
+            LEFT JOIN product_product pp
+                ON l.product_id = pp.id
+            LEFT JOIN product_template pt
+                ON pp.product_tmpl_id = pt.id
+            LEFT JOIN res_partner r
+                ON a.partner_id = r.id
+            LEFT JOIN account_move_line_account_tax_rel rel
+                ON l.id = rel.account_move_line_id
+            LEFT JOIN account_tax t
+                ON rel.account_tax_id = t.id
+
+            WHERE a.move_type = 'in_invoice'
+                AND a.state = 'posted'
+                AND a.invoice_date BETWEEN %s AND %s
+
+            GROUP BY
+                a.id,
+                r.name,
+                r.contact_address_complete,
+                r.vat
+
+            ORDER BY
+                a.invoice_date,
+                a.name;
+        """,
     'disbursement_journal': """
         SELECT DISTINCT ON (he.id)
         am.create_date::date AS "RELEASED DATE",
@@ -992,6 +1020,7 @@ class SqlReport(models.Model):
 
     from_date = fields.Date("From Date", required=True)
     to_date = fields.Date("To Date", required=True)
+    journal_id = fields.Many2one("account.journal", string="Sales Journal",domain="[('type', '=', 'sale')]",)
 
     sql_query = fields.Text("SQL Query")
     
