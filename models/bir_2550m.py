@@ -1,6 +1,7 @@
 from odoo import models, fields, api
 from odoo.exceptions import ValidationError, UserError
 from datetime import date
+import json
 import calendar
 
 
@@ -581,7 +582,7 @@ class Bir2550M(models.Model):
         }
         return months.get(self.month or "1", "")
 
-    def action_generate_data(self):
+    def _action_generate_data_legacy_direct(self):
         """
         Auto-generate Sch 1 (Vatable Sales) and Sch 2 (Capital Goods ≤ ₱1M)
         from posted journal entries.
@@ -662,6 +663,100 @@ class Bir2550M(models.Model):
                     f"Sch 1: {len(rec.sch1_ids)} line(s). "
                     f"Sch 2: {len(rec.sch2_ids)} line(s). "
                     "Please review and fill in Schedules 3–8 manually."
+                )
+            )
+
+    # =====================================================
+    # REPORTING-BASED DATA GENERATION
+    # =====================================================
+
+    def _get_generated_vat_sales_rows(self):
+        """Read the JSON behind the generated VAT Summary List - Sales table."""
+        self.ensure_one()
+        report = self.env["custom.sql.report"].search([
+            ("name", "=", "vat_summary_sales"),
+            ("from_date", "=", self.date_from),
+            ("to_date", "=", self.date_to),
+        ], order="generated_on desc, id desc", limit=1)
+        if not report or not report.result_ids:
+            raise UserError(
+                "Generate VAT Summary List - Sales in Reporting first for "
+                f"{self.date_from} to {self.date_to}."
+            )
+
+        rows = []
+        for line in report.result_ids:
+            try:
+                rows.extend(json.loads(line.data or "[]"))
+            except (TypeError, ValueError):
+                raise UserError("The generated VAT Summary List - Sales result is not valid JSON.")
+        return rows
+
+    @staticmethod
+    def _sum_report_column(rows, column):
+        """Sum formatted numeric values stored by custom.sql.report.line."""
+        total = 0.0
+        for row in rows:
+            value = row.get(column, 0) or 0
+            try:
+                total += float(str(value).replace(",", "").strip() or 0)
+            except (TypeError, ValueError):
+                raise UserError(
+                    f"Report column {column!r} contains a non-numeric value: {value!r}"
+                )
+        return total
+
+    def action_generate_data(self):
+        """Fill Schedule 1 sales from the generated VAT Summary List - Sales."""
+        for rec in self:
+            if rec.state not in ("draft", "generated"):
+                raise UserError("Only Draft or Generated returns can pull data. Reset to Draft first.")
+            if not rec.date_from or not rec.date_to:
+                raise ValidationError("Month/Year not properly set.")
+
+            sales_rows = rec._get_generated_vat_sales_rows()
+            taxable_sales = (
+                rec._sum_report_column(sales_rows, "AMOUNT OF TAXABLE SALES - PRIVATE")
+                + rec._sum_report_column(sales_rows, "AMOUNT OF TAXABLE SALES - GOVERNMENT")
+            )
+            reported_output_tax = rec._sum_report_column(sales_rows, "AMOUNT OF OUTPUT TAX")
+            schedule_output_tax = round(taxable_sales * 0.12, 2)
+
+            # Schedule 1 currently computes tax at 12%; do not silently copy
+            # report data that cannot be represented by that existing formula.
+            if abs(schedule_output_tax - reported_output_tax) > 0.01:
+                raise ValidationError(
+                    "VAT Summary List - Sales output tax does not match the existing "
+                    "2550M Schedule 1 12% calculation. No data was changed."
+                )
+
+            if len(rec.sch1_ids) > 1:
+                raise UserError(
+                    "This return has multiple Schedule 1 classifications. "
+                    "Reporting provides only an aggregated taxable-sales total, so no data was changed."
+                )
+
+            if rec.sch1_ids:
+                # Preserve the user-maintained Industry Classification and ATC.
+                rec.sch1_ids.write({"sales_amount": taxable_sales})
+            else:
+                if not rec.line_of_business:
+                    raise ValidationError(
+                        "Set Line of Business before generating a new Schedule 1 line. "
+                        "Reporting does not provide an Industry Classification."
+                    )
+                self.env["bir.2550m.sch1"].create({
+                    "bir_id": rec.id,
+                    "industry": rec.line_of_business,
+                    "atc": "",
+                    "sales_amount": taxable_sales,
+                })
+
+            rec.state = "generated"
+            rec.message_post(
+                body=(
+                    "Schedule 1 taxable sales were populated from the generated "
+                    "VAT Summary List - Sales. Industry Classification and ATC were preserved."
                 )
             )
 
