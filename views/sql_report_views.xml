@@ -16,24 +16,32 @@
                                 name="action_execute_query"
                                 class="btn btn-primary o_btn_icon"
                                 string="Generate Report"/>
-                        
-                        <!-- Export Excel -->
-                        <!-- Export Excel -->
-                        <button type="object"
-                                name="action_export_excel"
-                                class="btn o_btn_icon"
-                                title="Export the current report to Excel">
-                            <img src="https://img.icons8.com/ios-filled/50/000000/ms-excel.png"
-                                 alt="Excel Icon"
-                                 style="width:20px; height:20px; margin-right:5px;"/>
-                            <span>Export</span>
 
-                        </button>
+                    <button type="object"
+                            name="action_export_pdf"
+                            class="oe_stat_button"
+                            icon="fa-file-pdf-o">
+                        <div class="o_stat_info">
+                            <span class="o_stat_text">Export PDF</span>
+                        </div>
+                    </button>
+
                     </div>
                 </header>
 
 
                 <sheet>
+                    <div class="o_button_box" name="button_box">
+                        <button name="action_export_dat"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-file-text-o">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Export</span>
+                                <span class="o_stat_text">DAT</span>
+                            </div>
+                        </button>
+                    </div>
                     <!-- =========================
                         Report Info
                     ========================= -->
