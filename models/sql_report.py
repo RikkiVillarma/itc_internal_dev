@@ -1470,8 +1470,8 @@ class SqlReport(models.Model):
         self.ensure_one()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
-        if self.name != 'qap_summary':
-            raise UserError("DAT export is currently only supported for the QAP Summary report.")
+        if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales'):
+            raise UserError("DAT export is currently only supported for the QAP Summary, Form 1604E, and VAT Summary Sales reports.")
 
         def _to_float(val):
             if val in (None, '', '-'):
@@ -1483,48 +1483,119 @@ class SqlReport(models.Model):
 
         columns, rows = self.get_table_data()
         company = self.env.company
-        period = self.from_date.strftime('%m/%Y')
         agent_tin = (company.vat or '').replace('-', '')
         branch = '0000'
 
-        lines = [f"HQAP,H1601EQ,{agent_tin},{branch},{company.name or ''},{period},{company.rdo_code or ''}"]
+        if self.name == 'qap_summary':
+            period = self.from_date.strftime('%m/%Y')
+            lines = [f"HQAP,H1601EQ,{agent_tin},{branch},{company.name or ''},{period},{company.rdo_code or ''}"]
 
-        total_income = 0.0
-        total_tax = 0.0
-        for idx, row in enumerate(rows, start=1):
-            is_company = row.get("IS COMPANY")
-            if is_company:
-                name = row.get("CORPORATION") or ''
-                last, first, middle = '0', '0', '0'
-            else:
-                name = row.get("INDIVIDUAL") or ''
-                last = row.get("LAST NAME") or '0'
-                first = row.get("FIRST NAME") or '0'
-                middle = row.get("MIDDLE NAME") or '0'
+            total_income = 0.0
+            total_tax = 0.0
+            for idx, row in enumerate(rows, start=1):
+                is_company = row.get("IS COMPANY")
+                if is_company:
+                    name = row.get("CORPORATION") or ''
+                    last, first, middle = '0', '0', '0'
+                else:
+                    name = row.get("INDIVIDUAL") or ''
+                    last = row.get("LAST NAME") or '0'
+                    first = row.get("FIRST NAME") or '0'
+                    middle = row.get("MIDDLE NAME") or '0'
 
-            payee_tin = (row.get("TAXPAYER IDENTIFICATION NUMBER") or '').replace('-', '')
-            atc = row.get("ATC CODE") or ''
-            rate_str = (row.get("TAX RATE M1") or row.get("TAX RATE M2") or row.get("TAX RATE M3") or '0%').replace('%', '')
-            try:
-                rate = float(rate_str) / 100
-            except ValueError:
-                rate = 0
+                payee_tin = (row.get("TAXPAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+                atc = row.get("ATC CODE") or ''
+                rate_str = (row.get("TAX RATE M1") or row.get("TAX RATE M2") or row.get("TAX RATE M3") or '0%').replace('%', '')
+                try:
+                    rate = float(rate_str) / 100
+                except ValueError:
+                    rate = 0
 
-            income = _to_float(row.get("TOTAL INCOME PAYMENT"))
-            tax = _to_float(row.get("TOTAL TAX WITHHELD"))
-            total_income += income
-            total_tax += tax
+                income = _to_float(row.get("TOTAL INCOME PAYMENT"))
+                tax = _to_float(row.get("TOTAL TAX WITHHELD"))
+                total_income += income
+                total_tax += tax
 
-            lines.append(
-                f"D1,1601EQ,{idx},{payee_tin},0000,{name},{last},{first},{middle},"
-                f"{period},{atc},{rate},{income:.0f},{tax:.0f}"
+                lines.append(
+                    f"D1,1601EQ,{idx},{payee_tin},0000,{name},{last},{first},{middle},"
+                    f"{period},{atc},{rate},{income:.0f},{tax:.0f}"
+                )
+
+            lines.append(f"C1,1601EQ,{agent_tin},{branch},{period},{total_income:.0f},{total_tax:.0f}")
+
+        elif self.name == 'form_1604e':
+            period = self.to_date.strftime('%m/%d/%Y')
+            lines = [f"H1604E,{agent_tin},{branch},{period},N,0,000"]
+
+            total_tax = 0.0
+            for idx, row in enumerate(rows, start=1):
+                payee_tin = (row.get("TAXPAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+                name = row.get("REGISTERED NAME") or row.get("NAME OF PAYEES") or ''
+                # Not split into last/first/middle by this report's query yet — see note above.
+                last, first, middle = '', '', ''
+                atc = row.get("ATC CODE") or ''
+                rate_str = (row.get("RATE OF TAX") or '0%').replace('%', '')
+                try:
+                    rate = float(rate_str)
+                except ValueError:
+                    rate = 0
+
+                income = _to_float(row.get("AMOUNT OF INCOME PAYMENT"))
+                tax = _to_float(row.get("AMOUNT OF TAX WITHHELD"))
+                total_tax += tax
+
+                lines.append(
+                    f'D4,1604E,{agent_tin},{branch},{period},{idx},{payee_tin},{branch},'
+                    f'"{name}",{last},{first},{middle},{atc},{income:.2f},{rate:.2f},{tax:.2f}'
+                )
+
+            lines.append(f"C4,1604E,{agent_tin},{branch},{period},{total_tax:.2f}")
+            
+        elif self.name == 'vat_summary_sales':
+            period = self.to_date.strftime('%m/%d/%Y')
+            company_tin = agent_tin
+            company_name = company.name or ''
+            trade_name = company.name or ''
+            region_code = ''
+            region_name = ''
+            rdo_code = company.rdo_code or ''
+
+            total_exempt = 0.0
+            total_zero_rated = 0.0
+            total_vatable = 0.0
+            total_vat = 0.0
+            detail_lines = []
+
+            for row in rows:
+                customer_tin = (row.get("TAX PAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+                customer_name = row.get("REGISTERED NAME") or ''
+                exempt = _to_float(row.get("AMOUNT OF EXEMPT SALES"))
+                zero_rated = _to_float(row.get("AMOUNT OF ZERO RATED SALES"))
+                vatable = (_to_float(row.get("AMOUNT OF TAXABLE SALES - PRIVATE"))
+                        + _to_float(row.get("AMOUNT OF TAXABLE SALES - GOVERNMENT")))
+                vat_amount = _to_float(row.get("AMOUNT OF OUTPUT TAX"))
+
+                total_exempt += exempt
+                total_zero_rated += zero_rated
+                total_vatable += vatable
+                total_vat += vat_amount
+
+                detail_lines.append(
+                    f'D,S,{customer_tin},{customer_name},,,,{region_code},{region_name},'
+                    f'{exempt:.2f},{zero_rated:.2f},{vatable:.2f},{vat_amount:.2f},{company_tin},{period}'
+                )
+
+            header = (
+                f'H,S,{company_tin},{company_name},,,,{trade_name},{region_code},{region_name},'
+                f'{total_exempt:.2f},{total_zero_rated:.2f},{total_vatable:.2f},{total_vat:.2f},'
+                f'{rdo_code},{period},{len(rows)}'
             )
 
-        lines.append(f"C1,1601EQ,{agent_tin},{branch},{period},{total_income:.0f},{total_tax:.0f}")
+            lines = [header] + detail_lines
 
         dat_content = "\n".join(lines)
         attachment = self.env['ir.attachment'].create({
-            'name': f"{self.name}_QAP.dat",
+            'name': f"{self.name}.dat",
             'type': 'binary',
             'datas': base64.b64encode(dat_content.encode('utf-8')),
             'res_model': self._name,
