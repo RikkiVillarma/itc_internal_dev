@@ -978,8 +978,7 @@ SQL_QUERIES = {
             SELECT %s::date AS date_from, %s::date AS date_to
         ),
         bounds AS (
-            SELECT
-                date_from, date_to,
+            SELECT date_from, date_to,
                 date_from AS m1_start,
                 (date_from + INTERVAL '1 month' - INTERVAL '1 day')::date AS m1_end,
                 (date_from + INTERVAL '1 month')::date AS m2_start,
@@ -993,6 +992,10 @@ SQL_QUERIES = {
             rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
             CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "CORPORATION",
             CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "INDIVIDUAL",
+            rp.is_company AS "IS COMPANY",
+            rp.last_name AS "LAST NAME",
+            rp.first_name AS "FIRST NAME",
+            rp.middle_name AS "MIDDLE NAME",
             UPPER(
                 REGEXP_REPLACE(
                     COALESCE(
@@ -1024,7 +1027,7 @@ SQL_QUERIES = {
         AND at.type_tax_use = 'purchase'
         AND at.amount < 0
         AND am.invoice_date BETWEEN b.date_from AND b.date_to
-        GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
+        GROUP BY rp.name, rp.vat, rp.is_company, rp.last_name, rp.first_name, rp.middle_name, at.name, at.description, at.amount
         ORDER BY rp.name;
     """,
     'form_1604e': """
@@ -1062,6 +1065,10 @@ SQL_QUERIES = {
         ORDER BY rp.name;
     """,
 }
+
+class ResCompany(models.Model):
+    _inherit = 'res.company'
+    rdo_code = fields.Char("RDO Code")
 
 """ Start of the class """
 class SqlReport(models.Model):
@@ -1207,19 +1214,20 @@ class SqlReport(models.Model):
                         val = formatted_val
                     row_dict[col] = val
                     align = "right" if isinstance(val, str) and val.replace(",", "").replace(".", "").isdigit() else "left"
-                    cells.append(f"<td style='width:200px; text-align:{align};'>{val or ''}</td>")
+                    cells.append(f"<td style='min-width:150px; text-align:{align};'>{val or ''}</td>")
                 serializable_rows.append(row_dict)
                 row_html_parts.append(f"<tr>{''.join(cells)}</tr>")
 
             # --- Compute Totals ---
             total_cells = []
-            for col in columns:
+            for idx, col in enumerate(columns):
+                if idx == 0:
+                    total_cells.append("<td style='font-weight:bold;'>TOTAL</td>")
+                    continue
                 total_val = numeric_totals.get(col)
                 if isinstance(total_val, (int, float)) and total_val != 0:
                     formatted_total = f"{total_val:,.2f}"
                     total_cells.append(f"<td style='font-weight:bold; text-align:right;'>{formatted_total}</td>")
-                elif col == columns[0]:
-                    total_cells.append("<td style='font-weight:bold;'>TOTAL</td>")
                 else:
                     total_cells.append("<td></td>")
 
@@ -1238,10 +1246,10 @@ class SqlReport(models.Model):
                     position: relative;
                 ">
                     <table class="table table-sm table-bordered" 
-                        style="width:100%; border-collapse: collapse; table-layout: fixed;">
+                        style="width:100%; border-collapse: collapse; table-layout: auto;">
                         <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 2;">
                             <tr>
-                                {"".join(f"<th style='width:200px; background-color:#f8f9fa; text-align:center; border:1px solid #dee2e6; position: sticky; top: 0;'>{col}</th>" for col in columns)}
+                                {"".join(f"<th style='min-width:150px; background-color:#f8f9fa; text-align:center; border:1px solid #dee2e6; position: sticky; top: 0;'>{col}</th>" for col in columns)}
                             </tr>
                         </thead>
                         <tbody>
@@ -1273,7 +1281,7 @@ class SqlReport(models.Model):
 
     def get_table_data(self):
         columns = json.loads(self.result_columns or "[]")
-        rows = [json.loads(r.data) for r in self.result_ids]
+        rows = [item for r in self.result_ids for item in json.loads(r.data or "[]")]
         return columns, rows
 
     """ Export to Excel Action"""    
@@ -1458,6 +1466,76 @@ class SqlReport(models.Model):
             'target': 'self',
         }
 
+    def action_export_dat(self):
+        self.ensure_one()
+        if not self.result_ids:
+            raise UserError("No data to export. Execute a query first.")
+        if self.name != 'qap_summary':
+            raise UserError("DAT export is currently only supported for the QAP Summary report.")
+
+        def _to_float(val):
+            if val in (None, '', '-'):
+                return 0.0
+            try:
+                return float(str(val).replace(',', ''))
+            except ValueError:
+                return 0.0
+
+        columns, rows = self.get_table_data()
+        company = self.env.company
+        period = self.from_date.strftime('%m/%Y')
+        agent_tin = (company.vat or '').replace('-', '')
+        branch = '0000'
+
+        lines = [f"HQAP,H1601EQ,{agent_tin},{branch},{company.name or ''},{period},{company.rdo_code or ''}"]
+
+        total_income = 0.0
+        total_tax = 0.0
+        for idx, row in enumerate(rows, start=1):
+            is_company = row.get("IS COMPANY")
+            if is_company:
+                name = row.get("CORPORATION") or ''
+                last, first, middle = '0', '0', '0'
+            else:
+                name = row.get("INDIVIDUAL") or ''
+                last = row.get("LAST NAME") or '0'
+                first = row.get("FIRST NAME") or '0'
+                middle = row.get("MIDDLE NAME") or '0'
+
+            payee_tin = (row.get("TAXPAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+            atc = row.get("ATC CODE") or ''
+            rate_str = (row.get("TAX RATE M1") or row.get("TAX RATE M2") or row.get("TAX RATE M3") or '0%').replace('%', '')
+            try:
+                rate = float(rate_str) / 100
+            except ValueError:
+                rate = 0
+
+            income = _to_float(row.get("TOTAL INCOME PAYMENT"))
+            tax = _to_float(row.get("TOTAL TAX WITHHELD"))
+            total_income += income
+            total_tax += tax
+
+            lines.append(
+                f"D1,1601EQ,{idx},{payee_tin},0000,{name},{last},{first},{middle},"
+                f"{period},{atc},{rate},{income:.0f},{tax:.0f}"
+            )
+
+        lines.append(f"C1,1601EQ,{agent_tin},{branch},{period},{total_income:.0f},{total_tax:.0f}")
+
+        dat_content = "\n".join(lines)
+        attachment = self.env['ir.attachment'].create({
+            'name': f"{self.name}_QAP.dat",
+            'type': 'binary',
+            'datas': base64.b64encode(dat_content.encode('utf-8')),
+            'res_model': self._name,
+            'res_id': self.id,
+            'mimetype': 'text/plain',
+        })
+        return {
+            'type': 'ir.actions.act_url',
+            'url': f"/web/content/{attachment.id}?download=true",
+            'target': 'self',
+        }
 
 
 class SqlReportLine(models.Model):
@@ -1526,3 +1604,5 @@ class SqlReportLine(models.Model):
         html += "</tbody></table>"
 
         return html
+
+
