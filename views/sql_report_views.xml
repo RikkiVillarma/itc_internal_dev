@@ -17,15 +17,10 @@
                                 class="btn btn-primary o_btn_icon"
                                 string="Generate Report"/>
 
-                    <button type="object"
-                            name="action_export_pdf"
-                            class="oe_stat_button"
-                            icon="fa-file-pdf-o">
-                        <div class="o_stat_info">
-                            <span class="o_stat_text">Export PDF</span>
-                        </div>
-                    </button>
-
+                        <button type="object"
+                                name="action_export_excel"
+                                class="btn btn-primary o_btn_icon"
+                                string="Export Excel"/>
                     </div>
                 </header>
 

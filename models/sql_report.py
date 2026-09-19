@@ -63,6 +63,7 @@ REPORT_NAMES = [
     ('form_1900', 'Form 1900'),
     ('secretary_cert', 'Secretary Cert'),
     ('inventory_book', 'Inventory Book'),
+    ('withholding_tax_book', 'Withholding Tax Book'),
 ]
 
 # Categories for various reports, can be expanded as needed.
@@ -1064,6 +1065,42 @@ SQL_QUERIES = {
         GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
         ORDER BY rp.name;
     """,
+    'withholding_tax_book': """
+        SELECT
+            am.invoice_date AS "DATE",
+            rp.name AS "NAME OF PAYEE/SUPPLIER",
+            rp.contact_address_complete AS "REGISTERED ADDRESS",
+            rp.vat AS "TIN",
+            'CV ENTRY' AS "TYPE",
+            am.ref AS "NUMBER",
+            am.amount_total AS "GROSS AMOUNT",
+            am.amount_tax AS "INPUT TAX (12%%)",
+            am.amount_untaxed AS "NET OF VAT",
+            CASE WHEN am.amount_tax > 0 THEN 'Y' ELSE 'N' END AS "INPUT TAX ALLOWED",
+            aa.name->>'en_US' AS "ACCOUNT TITLE",
+            aml.tax_base_amount AS "TAX BASE",
+            COALESCE(
+                NULLIF(at.l10n_ph_atc, ''),
+                UPPER(REGEXP_REPLACE(at.name->>'en_US', '\\s+', '', 'g'))
+            ) AS "ATC",
+            ABS(at.amount) AS "EWT RATE",
+            ABS(aml.credit - aml.debit) AS "AMOUNT"
+        FROM account_move_line aml
+        JOIN account_move am ON am.id = aml.move_id
+        JOIN account_tax at ON at.id = aml.tax_line_id
+        JOIN res_partner rp ON rp.id = am.partner_id
+        LEFT JOIN account_move_line expense_aml
+            ON expense_aml.move_id = am.id
+        AND expense_aml.tax_line_id IS NULL
+        AND expense_aml.product_id IS NOT NULL
+        LEFT JOIN account_account aa ON aa.id = expense_aml.account_id
+        WHERE am.move_type = 'in_invoice'
+        AND am.state = 'posted'
+        AND at.type_tax_use = 'purchase'
+        AND at.amount < 0
+        AND am.invoice_date BETWEEN %s AND %s
+        ORDER BY am.invoice_date, am.ref;
+    """
 }
 
 class ResCompany(models.Model):
@@ -1470,8 +1507,8 @@ class SqlReport(models.Model):
         self.ensure_one()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
-        if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales'):
-            raise UserError("DAT export is currently only supported for the QAP Summary, Form 1604E, and VAT Summary Sales reports.")
+        if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales', 'vat_summary_purchase'):
+            raise UserError("DAT export is currently only supported for the QAP Summary, Form 1604E, VAT Summary Sales, and VAT Summary Purchase reports.")
 
         def _to_float(val):
             if val in (None, '', '-'):
@@ -1592,7 +1629,108 @@ class SqlReport(models.Model):
             )
 
             lines = [header] + detail_lines
+        elif self.name == 'vat_summary_purchase':
+            period = self.to_date.strftime('%m/%d/%Y')
+            company_tin = agent_tin
+            company_name = company.name or ''
+            trade_name = company.name or ''
+            company_address = company.partner_id.contact_address_complete or ''
+            rdo_code = company.rdo_code or ''
+            fiscal_year_end = '12'  # calendar-year default; no field for this on res.company yet
 
+            total_exempt = 0.0
+            total_zero_rated = 0.0
+            total_service = 0.0
+            total_capital = 0.0
+            total_other_goods = 0.0
+            total_vat = 0.0
+            detail_lines = []
+
+            for row in rows:
+                supplier_tin = (row.get("TAX PAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+                supplier_name = row.get("REGISTERED NAME") or ''
+                supplier_address = row.get("SUPPLIER ADDRESS") or ''  # not split into street/city upstream
+
+                exempt = _to_float(row.get("AMOUNT OF EXEMPT PURCHASE"))
+                zero_rated = _to_float(row.get("AMOUNT OF ZERO-RATED PURCHASE"))
+                service = _to_float(row.get("AMOUNT OF PURCHASE OF SERVICES"))
+                capital = _to_float(row.get("AMOUNT OF PURCHASE OF CAPITAL GOODS"))
+                other_goods = _to_float(row.get("AMOUNT OF PURCHASE OF GOODS OTHER THAN CAPITAL GOODS"))
+                vat_amount = _to_float(row.get("AMOUNT OF INPUT TAX"))
+
+                total_exempt += exempt
+                total_zero_rated += zero_rated
+                total_service += service
+                total_capital += capital
+                total_other_goods += other_goods
+                total_vat += vat_amount
+
+                detail_lines.append(
+                    f'D,P,{supplier_tin},{supplier_name},,,,{supplier_address},,'
+                    f'{exempt:.2f},{zero_rated:.2f},{service:.2f},{capital:.2f},{other_goods:.2f},'
+                    f'{vat_amount:.2f},{company_tin},{period}'
+                )
+
+            header = (
+                f'H,P,{company_tin},{company_name},,,,{trade_name},{company_address},,'
+                f'{total_exempt:.2f},{total_zero_rated:.2f},{total_service:.2f},{total_capital:.2f},'
+                f'{total_other_goods:.2f},{total_vat:.2f},{total_vat:.2f},0.00,'
+                f'{rdo_code},{period},{fiscal_year_end}'
+            )
+
+            lines = [header] + detail_lines
+
+        elif self.name == 'vat_summary_purchase':
+            period = self.to_date.strftime('%m/%d/%Y')
+            company_tin = agent_tin
+            company_name = company.name or ''
+            trade_name = company.name or ''
+            company_address = company.partner_id.contact_address_complete or ''
+            rdo_code = company.rdo_code or ''
+            fiscal_year_end = '12'  # calendar-year default; no field for this on res.company yet
+
+            total_exempt = 0.0
+            total_zero_rated = 0.0
+            total_service = 0.0
+            total_capital = 0.0
+            total_other_goods = 0.0
+            total_vat = 0.0
+            detail_lines = []
+
+            for row in rows:
+                supplier_tin = (row.get("TAX PAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+                supplier_name = row.get("REGISTERED NAME") or ''
+                supplier_address = row.get("SUPPLIER ADDRESS") or ''  # not split into street/city upstream
+
+                exempt = _to_float(row.get("AMOUNT OF EXEMPT PURCHASE"))
+                zero_rated = _to_float(row.get("AMOUNT OF ZERO-RATED PURCHASE"))
+                service = _to_float(row.get("AMOUNT OF PURCHASE OF SERVICES"))
+                capital = _to_float(row.get("AMOUNT OF PURCHASE OF CAPITAL GOODS"))
+                other_goods = _to_float(row.get("AMOUNT OF PURCHASE OF GOODS OTHER THAN CAPITAL GOODS"))
+                vat_amount = _to_float(row.get("AMOUNT OF INPUT TAX"))
+
+                total_exempt += exempt
+                total_zero_rated += zero_rated
+                total_service += service
+                total_capital += capital
+                total_other_goods += other_goods
+                total_vat += vat_amount
+
+                detail_lines.append(
+                    f'D,P,{supplier_tin},{supplier_name},,,,{supplier_address},,'
+                    f'{exempt:.2f},{zero_rated:.2f},{service:.2f},{capital:.2f},{other_goods:.2f},'
+                    f'{vat_amount:.2f},{company_tin},{period}'
+                )
+
+            header = (
+                f'H,P,{company_tin},{company_name},,,,{trade_name},{company_address},,'
+                f'{total_exempt:.2f},{total_zero_rated:.2f},{total_service:.2f},{total_capital:.2f},'
+                f'{total_other_goods:.2f},{total_vat:.2f},{total_vat:.2f},0.00,'
+                f'{rdo_code},{period},{fiscal_year_end}'
+            )
+
+            lines = [header] + detail_lines
+            
         dat_content = "\n".join(lines)
         attachment = self.env['ir.attachment'].create({
             'name': f"{self.name}.dat",
