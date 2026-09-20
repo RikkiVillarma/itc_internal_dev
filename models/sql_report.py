@@ -63,6 +63,8 @@ REPORT_NAMES = [
     ('form_1900', 'Form 1900'),
     ('secretary_cert', 'Secretary Cert'),
     ('inventory_book', 'Inventory Book'),
+    ('form_1601e', 'Form 1601E'),
+    ('form_1601eq', 'Form 1601EQ'),
 ]
 
 # Categories for various reports, can be expanded as needed.
@@ -1030,15 +1032,19 @@ SQL_QUERIES = {
         GROUP BY rp.name, rp.vat, rp.is_company, rp.last_name, rp.first_name, rp.middle_name, at.name, at.description, at.amount
         ORDER BY rp.name;
     """,
-    'form_1604e': """
+    'form_1601e': """
         WITH params AS (
             SELECT %s::date AS date_from, %s::date AS date_to
         )
         SELECT
             ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ",
             rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
-            CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "REGISTERED NAME",
-            CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "NAME OF PAYEES",
+            CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "CORPORATION",
+            CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "INDIVIDUAL",
+            rp.is_company AS "IS COMPANY",
+            rp.last_name AS "LAST NAME",
+            rp.first_name AS "FIRST NAME",
+            rp.middle_name AS "MIDDLE NAME",
             UPPER(
                 REGEXP_REPLACE(
                     COALESCE(
@@ -1048,9 +1054,10 @@ SQL_QUERIES = {
                     '\\s+', '', 'g'
                 )
             ) AS "ATC CODE",
-            SUM(aml.tax_base_amount) AS "AMOUNT OF INCOME PAYMENT",
-            CONCAT(ABS(at.amount)::numeric(10,2), '%%') AS "RATE OF TAX",
-            SUM(ABS(aml.credit - aml.debit)) AS "AMOUNT OF TAX WITHHELD"
+            NULLIF(TRIM(REGEXP_REPLACE(at.description->>'en_US', '<[^>]+>', '', 'g')), '') AS "NATURE OF PAYMENT",
+            SUM(aml.tax_base_amount) AS "TOTAL INCOME PAYMENT",
+            CONCAT(ABS(at.amount)::numeric(10,2), '%%') AS "TAX RATE",
+            SUM(ABS(aml.credit - aml.debit)) AS "TOTAL TAX WITHHELD"
         FROM account_move_line aml
         JOIN account_move am ON am.id = aml.move_id
         JOIN account_tax at ON aml.tax_line_id = at.id
@@ -1061,10 +1068,11 @@ SQL_QUERIES = {
         AND at.type_tax_use = 'purchase'
         AND at.amount < 0
         AND am.invoice_date BETWEEN p.date_from AND p.date_to
-        GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
+        GROUP BY rp.name, rp.vat, rp.is_company, rp.last_name, rp.first_name, rp.middle_name, at.name, at.description, at.amount
         ORDER BY rp.name;
     """,
 }
+SQL_QUERIES['form_1601eq'] = SQL_QUERIES['qap_summary']
 
 class ResCompany(models.Model):
     _inherit = 'res.company'
@@ -1466,12 +1474,78 @@ class SqlReport(models.Model):
             'target': 'self',
         }
 
+
+    def _build_alphalist_dat_lines(self, rows, dat_prefix, form_code, period):
+        """Builds BIR alphalist DAT lines (H / D1 / C1 records) shared by the
+        QAP-for-1601EQ and MAP-for-1601E per-payee-per-ATC exports."""
+
+        def _to_float(val):
+            if val in (None, '', '-'):
+                return 0.0
+            try:
+                return float(str(val).replace(',', ''))
+            except ValueError:
+                return 0.0
+
+        company = self.env.company
+        agent_tin = (company.vat or '').replace('-', '')
+        branch = '0000'
+
+        lines = [
+            f"{dat_prefix},H{form_code},{agent_tin},{branch},{company.name or ''},"
+            f"{period},{company.rdo_code or ''},,,,,,,"
+        ]
+
+        total_income = 0.0
+        total_tax = 0.0
+        for idx, row in enumerate(rows, start=1):
+            is_company = row.get("IS COMPANY")
+            if is_company:
+                name = row.get("CORPORATION") or ''
+                last, first, middle = '', '', ''
+            else:
+                name = ''
+                last = row.get("LAST NAME") or ''
+                first = row.get("FIRST NAME") or ''
+                middle = row.get("MIDDLE NAME") or ''
+
+            payee_tin = (row.get("TAXPAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+            atc = row.get("ATC CODE") or ''
+            rate_str = (
+                row.get("TAX RATE M1") or row.get("TAX RATE M2") or row.get("TAX RATE M3")
+                or row.get("TAX RATE") or '0%'
+            ).replace('%', '')
+            try:
+                rate_val = float(rate_str)
+            except ValueError:
+                rate_val = 0.0
+            rate = f"{rate_val:g}"
+
+            income = _to_float(row.get("TOTAL INCOME PAYMENT"))
+            tax = _to_float(row.get("TOTAL TAX WITHHELD"))
+            total_income += income
+            total_tax += tax
+
+            lines.append(
+                f"D1,{form_code},{idx},{payee_tin},0000,{name},{last},{first},{middle},"
+                f"{period},{atc},{rate},{income:.2f},{tax:.2f}"
+            )
+
+        lines.append(
+            f"C1,{form_code},{agent_tin},{branch},{period},"
+            f"{total_income:.2f},{total_tax:.2f},,,,,,,"
+        )
+        return lines
+
     def action_export_dat(self):
         self.ensure_one()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
-        if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales'):
-            raise UserError("DAT export is currently only supported for the QAP Summary, Form 1604E, and VAT Summary Sales reports.")
+        if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales', 'form_1601e', 'form_1601eq'):
+            raise UserError(
+                "DAT export is currently only supported for the QAP Summary, Form 1604E, "
+                "VAT Summary Sales, Form 1601E, and Form 1601EQ reports."
+            )
 
         def _to_float(val):
             if val in (None, '', '-'):
@@ -1486,42 +1560,13 @@ class SqlReport(models.Model):
         agent_tin = (company.vat or '').replace('-', '')
         branch = '0000'
 
-        if self.name == 'qap_summary':
+        if self.name in ('qap_summary', 'form_1601eq'):
             period = self.from_date.strftime('%m/%Y')
-            lines = [f"HQAP,H1601EQ,{agent_tin},{branch},{company.name or ''},{period},{company.rdo_code or ''}"]
+            lines = self._build_alphalist_dat_lines(rows, dat_prefix='HQAP', form_code='1601EQ', period=period)
 
-            total_income = 0.0
-            total_tax = 0.0
-            for idx, row in enumerate(rows, start=1):
-                is_company = row.get("IS COMPANY")
-                if is_company:
-                    name = row.get("CORPORATION") or ''
-                    last, first, middle = '0', '0', '0'
-                else:
-                    name = row.get("INDIVIDUAL") or ''
-                    last = row.get("LAST NAME") or '0'
-                    first = row.get("FIRST NAME") or '0'
-                    middle = row.get("MIDDLE NAME") or '0'
-
-                payee_tin = (row.get("TAXPAYER IDENTIFICATION NUMBER") or '').replace('-', '')
-                atc = row.get("ATC CODE") or ''
-                rate_str = (row.get("TAX RATE M1") or row.get("TAX RATE M2") or row.get("TAX RATE M3") or '0%').replace('%', '')
-                try:
-                    rate = float(rate_str) / 100
-                except ValueError:
-                    rate = 0
-
-                income = _to_float(row.get("TOTAL INCOME PAYMENT"))
-                tax = _to_float(row.get("TOTAL TAX WITHHELD"))
-                total_income += income
-                total_tax += tax
-
-                lines.append(
-                    f"D1,1601EQ,{idx},{payee_tin},0000,{name},{last},{first},{middle},"
-                    f"{period},{atc},{rate},{income:.0f},{tax:.0f}"
-                )
-
-            lines.append(f"C1,1601EQ,{agent_tin},{branch},{period},{total_income:.0f},{total_tax:.0f}")
+        elif self.name == 'form_1601e':
+            period = self.from_date.strftime('%m/%Y')
+            lines = self._build_alphalist_dat_lines(rows, dat_prefix='HMAP', form_code='1601E', period=period)
 
         elif self.name == 'form_1604e':
             period = self.to_date.strftime('%m/%d/%Y')
@@ -1550,7 +1595,7 @@ class SqlReport(models.Model):
                 )
 
             lines.append(f"C4,1604E,{agent_tin},{branch},{period},{total_tax:.2f}")
-            
+
         elif self.name == 'vat_summary_sales':
             period = self.to_date.strftime('%m/%d/%Y')
             company_tin = agent_tin
