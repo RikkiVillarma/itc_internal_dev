@@ -63,12 +63,9 @@ REPORT_NAMES = [
     ('form_1900', 'Form 1900'),
     ('secretary_cert', 'Secretary Cert'),
     ('inventory_book', 'Inventory Book'),
-<<<<<<< HEAD
     ('withholding_tax_book', 'Withholding Tax Book'),
-=======
     ('form_1601e', 'Form 1601E'),
     ('form_1601eq', 'Form 1601EQ'),
->>>>>>> production
 ]
 
 # Categories for various reports, can be expanded as needed.
@@ -1581,16 +1578,11 @@ class SqlReport(models.Model):
         self.ensure_one()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
-<<<<<<< HEAD
-        if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales', 'vat_summary_purchase'):
-            raise UserError("DAT export is currently only supported for the QAP Summary, Form 1604E, VAT Summary Sales, and VAT Summary Purchase reports.")
-=======
         if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales', 'form_1601e', 'form_1601eq'):
             raise UserError(
                 "DAT export is currently only supported for the QAP Summary, Form 1604E, "
                 "VAT Summary Sales, Form 1601E, and Form 1601EQ reports."
             )
->>>>>>> production
 
         def _to_float(val):
             if val in (None, '', '-'):
