@@ -27,6 +27,7 @@
         'report/sales_invoice_report.xml',
         'report/sales_order_report.xml',
         'report/purchase_order_report.xml',
+        'report/purchase_order_request.xml',
         'report/official_receipt_report.xml',
         'report/service_invoice_report.xml',
         'report/credit_memo_report.xml',
