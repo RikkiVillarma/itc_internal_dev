@@ -70,11 +70,11 @@
         # Change Request modules
         #'views/account_payment_register_views.xml',
         'views/cash_advance_views.xml',
-        #'views/disbursement_voucher_views.xml',
-        #'views/disbursement_voucher_line_views.xml',
-        #'views/disbursement_payment_views.xml',
-        #'views/disbursement_menu.xml',
-        #'views/request_for_payment_views.xml',
+        'views/disbursement_voucher_views.xml',
+        'views/disbursement_voucher_line_views.xml',
+        'views/disbursement_payment_views.xml',
+        'views/disbursement_menu.xml',
+        'views/request_for_payment_views.xml',
        
 
     ],

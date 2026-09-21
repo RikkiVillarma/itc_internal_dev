@@ -63,6 +63,7 @@ REPORT_NAMES = [
     ('form_1900', 'Form 1900'),
     ('secretary_cert', 'Secretary Cert'),
     ('inventory_book', 'Inventory Book'),
+    ('withholding_tax_book', 'Withholding Tax Book'),
     ('form_1601e', 'Form 1601E'),
     ('form_1601eq', 'Form 1601EQ'),
 ]
@@ -291,48 +292,96 @@ SQL_QUERIES = {
                 a.name;
         """,
     'disbursement_journal': """
-        SELECT DISTINCT ON (he.id)
-        am.create_date::date AS "RELEASED DATE",
-        he.date::date AS "DATE",
-        CONCAT('CV', LPAD(hes.id::text, 6, '0')) AS "VOUCHER NUMBER",
-        p.default_code AS "TYPE",
-        r.name AS "PAYEE / SUPPLIER",
-        he.x_particulars AS "PARTICULARS",
-        am.id AS "SI NO",
-        ap.name AS "OR NO",
-        '' AS "OTHER REFERENCES",
-        he.total_amount AS "AMOUNT",
-        CASE 
-            WHEN at.name->>'en_US' ILIKE '%%0%%ZR%%' THEN he.total_amount
-            ELSE 0 
-        END AS "ZERO-RATED",
-        CASE 
-            WHEN at.name->>'en_US' ILIKE '%%0%%EXEMPT%%' THEN he.untaxed_amount_currency
-            ELSE 0 
-        END AS "EXEMPT / NON-VAT",
-        CASE 
-            WHEN at.name->>'en_US' ILIKE '%%12%%' THEN he.untaxed_amount_currency
-            ELSE 0 
-        END AS "VATABLE",
-        he.tax_amount AS "INPUT TAX 12%%",
-        he.total_amount AS "GROSS AMOUNT",
-        CASE 
-            WHEN at.name->>'en_US' ILIKE '%%12%%' THEN 'Y'
-            ELSE 'N'
-        END AS "INPUT TAX ALLOWED?",
-        aa.name->>'en_US' AS "ACCOUNT TITLE"
-        FROM hr_expense_sheet hes
-        INNER JOIN hr_expense he ON hes.id = he.sheet_id
-        INNER JOIN account_payment ap ON hes.journal_id = ap.journal_id
-        LEFT JOIN account_move am ON ap.move_id = am.id
-        LEFT JOIN account_move_line aml ON am.id = aml.move_id
-        LEFT JOIN expense_tax et ON he.id = et.expense_id
-        LEFT JOIN account_tax at ON et.tax_id = at.id
-        LEFT JOIN product_product p ON he.product_id = p.id
-        LEFT JOIN res_partner r ON he.vendor_id = r.id
-        LEFT JOIN account_account aa ON he.account_id = aa.id
-        ORDER BY he.id, hes.accounting_date, he.date, he.x_particulars;
-
+        WITH pay_bill AS (
+            SELECT DISTINCT
+                ap.id AS payment_id,
+                bill_am.id AS bill_id
+            FROM account_payment ap
+            JOIN account_move_line pay_aml ON pay_aml.move_id = ap.move_id
+            JOIN account_partial_reconcile pr
+                ON pr.credit_move_id = pay_aml.id OR pr.debit_move_id = pay_aml.id
+            JOIN account_move_line bill_aml
+                ON bill_aml.id = CASE WHEN pr.credit_move_id = pay_aml.id
+                                       THEN pr.debit_move_id ELSE pr.credit_move_id END
+            JOIN account_move bill_am ON bill_am.id = bill_aml.move_id
+            WHERE bill_am.move_type = 'in_invoice'
+                AND bill_am.id != ap.move_id
+        ),
+        expense_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id,
+                aa.name->>'en_US' AS account_title
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL AND aml.product_id IS NOT NULL
+            ORDER BY aml.move_id, aml.id
+        ),
+        line_values AS (
+            SELECT
+                l.id, l.move_id, l.price_subtotal,
+                BOOL_OR(tag.name->>'en_US' ILIKE '%%46E%%') AS is_exempt,
+                BOOL_OR(tag.name->>'en_US' ILIKE '%%46ZR%%') AS is_zero_rated,
+                BOOL_OR(tag.name->>'en_US' ILIKE '%%42A%%') AS is_taxable
+            FROM account_move_line l
+            LEFT JOIN account_account_tag_account_move_line_rel tagrel ON tagrel.account_move_line_id = l.id
+            LEFT JOIN account_account_tag tag ON tag.id = tagrel.account_account_tag_id
+            WHERE l.product_id IS NOT NULL
+            GROUP BY l.id, l.move_id, l.price_subtotal
+        ),
+        line_totals AS (
+            SELECT
+                move_id,
+                SUM(CASE WHEN is_exempt THEN price_subtotal ELSE 0 END) AS exempt_amount,
+                SUM(CASE WHEN is_zero_rated THEN price_subtotal ELSE 0 END) AS zero_rated_amount,
+                SUM(CASE WHEN is_taxable THEN price_subtotal ELSE 0 END) AS vatable_amount
+            FROM line_values
+            GROUP BY move_id
+        ),
+        ewt AS (
+            SELECT
+                aml.move_id,
+                MAX(ABS(at.amount)) / 100.0 AS ewt_rate,
+                SUM(ABS(aml.credit - aml.debit)) AS ewt_amount
+            FROM account_move_line aml
+            JOIN account_tax at ON at.id = aml.tax_line_id
+            WHERE at.type_tax_use = 'purchase' AND at.amount < 0
+            GROUP BY aml.move_id
+        )
+        SELECT
+            ap.create_date AS "RELEASED DATE",
+            bill_am.create_date AS "DATE",
+            ap.name AS "NUMBER",
+            '' AS "TYPE",
+            '' AS "SECONDARY NUMBER",
+            rp.name AS "PAYEE/SUPPLIER",
+            CONCAT('To record payment for ', COALESCE(el.account_title, '')) AS "PARTICULARS",
+            CONCAT('SAI# ', COALESCE(bill_am.ref, bill_am.name)) AS "PRIMARY",
+            '' AS "SUPPLEMENTARY",
+            '' AS "OTHER REFERENCES",
+            ap.amount AS "AMOUNT",
+            COALESCE(lt.zero_rated_amount, 0) AS "ZERO-RATED",
+            COALESCE(lt.exempt_amount, 0) AS "EXEMPT/NON-VAT",
+            COALESCE(lt.vatable_amount, bill_am.amount_untaxed) AS "VATABLE",
+            bill_am.amount_tax AS "INPUT TAX 12%%",
+            bill_am.amount_total AS "GROSS AMOUNT",
+            CASE WHEN COALESCE(lt.vatable_amount, 0) > 0 THEN 'Y' ELSE 'N' END AS "INPUT TAX ALLOWED?",
+            COALESCE(lt.vatable_amount, bill_am.amount_untaxed) AS "TAX BASE",
+            COALESCE(ewt.ewt_rate, 0) AS "RATE",
+            COALESCE(ewt.ewt_amount, 0) AS "EWT AMOUNT",
+            'N' AS "EWT ABSORBED BY COMPANY?",
+            (bill_am.amount_total - COALESCE(ewt.ewt_amount, 0)) AS "CV AMOUNT (CREDIT)",
+            COALESCE(el.account_title, '') AS "ACCOUNT TITLE"
+        FROM account_payment ap
+        JOIN pay_bill pb ON pb.payment_id = ap.id
+        JOIN account_move bill_am ON bill_am.id = pb.bill_id
+        JOIN res_partner rp ON rp.id = ap.partner_id
+        LEFT JOIN expense_line el ON el.move_id = bill_am.id
+        LEFT JOIN line_totals lt ON lt.move_id = bill_am.id
+        LEFT JOIN ewt ON ewt.move_id = bill_am.id
+        WHERE ap.payment_type = 'outbound'
+            AND ap.state = 'posted'
+            AND ap.date BETWEEN %s AND %s
+        ORDER BY ap.date, ap.name;
     """,
     'ap_history': """ 
         SELECT
@@ -1071,6 +1120,179 @@ SQL_QUERIES = {
         GROUP BY rp.name, rp.vat, rp.is_company, rp.last_name, rp.first_name, rp.middle_name, at.name, at.description, at.amount
         ORDER BY rp.name;
     """,
+    'withholding_tax_book': """
+        SELECT
+            am.invoice_date AS "DATE",
+            rp.name AS "NAME OF PAYEE/SUPPLIER",
+            rp.contact_address_complete AS "REGISTERED ADDRESS",
+            rp.vat AS "TIN",
+            'CV ENTRY' AS "TYPE",
+            am.ref AS "NUMBER",
+            am.amount_total AS "GROSS AMOUNT",
+            am.amount_tax AS "INPUT TAX (12%%)",
+            am.amount_untaxed AS "NET OF VAT",
+            CASE WHEN am.amount_tax > 0 THEN 'Y' ELSE 'N' END AS "INPUT TAX ALLOWED",
+            aa.name->>'en_US' AS "ACCOUNT TITLE",
+            aml.tax_base_amount AS "TAX BASE",
+            COALESCE(
+                NULLIF(at.l10n_ph_atc, ''),
+                UPPER(REGEXP_REPLACE(at.name->>'en_US', '\\s+', '', 'g'))
+            ) AS "ATC",
+            ABS(at.amount) AS "EWT RATE",
+            ABS(aml.credit - aml.debit) AS "AMOUNT"
+        FROM account_move_line aml
+        JOIN account_move am ON am.id = aml.move_id
+        JOIN account_tax at ON at.id = aml.tax_line_id
+        JOIN res_partner rp ON rp.id = am.partner_id
+        LEFT JOIN account_move_line expense_aml
+            ON expense_aml.move_id = am.id
+        AND expense_aml.tax_line_id IS NULL
+        AND expense_aml.product_id IS NOT NULL
+        LEFT JOIN account_account aa ON aa.id = expense_aml.account_id
+        WHERE am.move_type = 'in_invoice'
+        AND am.state = 'posted'
+        AND at.type_tax_use = 'purchase'
+        AND at.amount < 0
+        AND am.invoice_date BETWEEN %s AND %s
+        ORDER BY am.invoice_date, am.ref;
+    """,
+    'aging_ap': """
+        WITH params AS (
+            SELECT %s::date AS date_from, %s::date AS date_to
+        ),
+        ap_line AS (
+            SELECT aml.move_id, SUM(aml.balance) * -1 AS outstanding_amount
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aa.account_type = 'liability_payable'
+            GROUP BY aml.move_id
+        ),
+        expense_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id,
+                aml.name AS particulars,
+                aa.name->>'en_US' AS account_title
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL AND aml.product_id IS NOT NULL
+            ORDER BY aml.move_id, aml.id
+        ),
+        line_values AS (
+            SELECT
+                l.id, l.move_id, l.price_subtotal,
+                BOOL_OR(tag.name->>'en_US' ILIKE '%%46E%%') AS is_exempt,
+                BOOL_OR(tag.name->>'en_US' ILIKE '%%46ZR%%') AS is_zero_rated,
+                BOOL_OR(tag.name->>'en_US' ILIKE '%%42A%%') AS is_taxable
+            FROM account_move_line l
+            LEFT JOIN account_account_tag_account_move_line_rel tagrel ON tagrel.account_move_line_id = l.id
+            LEFT JOIN account_account_tag tag ON tag.id = tagrel.account_account_tag_id
+            WHERE l.product_id IS NOT NULL
+            GROUP BY l.id, l.move_id, l.price_subtotal
+        ),
+        line_totals AS (
+            SELECT
+                move_id,
+                SUM(CASE WHEN is_exempt THEN price_subtotal ELSE 0 END) AS exempt_amount,
+                SUM(CASE WHEN is_zero_rated THEN price_subtotal ELSE 0 END) AS zero_rated_amount,
+                SUM(CASE WHEN is_taxable THEN price_subtotal ELSE 0 END) AS vatable_amount
+            FROM line_values
+            GROUP BY move_id
+        ),
+        ewt AS (
+            SELECT
+                aml.move_id,
+                MAX(ABS(at.amount)) / 100.0 AS ewt_rate,
+                SUM(ABS(aml.credit - aml.debit)) AS ewt_payable
+            FROM account_move_line aml
+            JOIN account_tax at ON at.id = aml.tax_line_id
+            WHERE at.type_tax_use = 'purchase' AND at.amount < 0
+            GROUP BY aml.move_id
+        )
+        SELECT
+            am.invoice_date AS "AP DATE",
+            am.name AS "AP ENTRY NUMBER",
+            rp.name AS "NAME OF SUPPLIER",
+            COALESCE(el.particulars, '') AS "PARTICULARS",
+            COALESCE(el.account_title, '') AS "ACCOUNT TITLE",
+            am.invoice_date AS "REFERENCE DATE",
+            am.ref AS "SALES INVOICE",
+            '' AS "BILLING",
+            '' AS "OTHERS",
+            COALESCE(lt.vatable_amount, am.amount_untaxed) AS "VATABLE",
+            COALESCE(lt.zero_rated_amount, 0) AS "ZERO-RATED",
+            COALESCE(lt.exempt_amount, 0) AS "EXEMPT",
+            am.amount_tax AS "12%% VAT",
+            am.amount_total AS "TOTAL",
+            COALESCE(ewt.ewt_rate, 0) AS "EWT RATE",
+            COALESCE(ewt.ewt_payable, 0) AS "EWT PAYABLE",
+            (am.amount_total - COALESCE(ewt.ewt_payable, 0)) AS "AMOUNT DUE",
+            am.invoice_date_due AS "DUE DATE",
+            p.date_to AS "REPORT DATE",
+            (p.date_to - am.invoice_date_due) AS "N0. OF DAYS OVERDUE",
+            CASE WHEN am.invoice_date_due >= p.date_to THEN ap_line.outstanding_amount ELSE 0 END AS "CURRENT",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 1 AND 30 THEN ap_line.outstanding_amount ELSE 0 END AS "[01-30]",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 31 AND 60 THEN ap_line.outstanding_amount ELSE 0 END AS "[31-60]",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 61 AND 90 THEN ap_line.outstanding_amount ELSE 0 END AS "[61-90]",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 91 AND 120 THEN ap_line.outstanding_amount ELSE 0 END AS "[91-120]",
+            CASE WHEN (p.date_to - am.invoice_date_due) > 120 THEN ap_line.outstanding_amount ELSE 0 END AS "[121-OVER]"
+        FROM account_move am
+        JOIN res_partner rp ON rp.id = am.partner_id
+        JOIN ap_line ON ap_line.move_id = am.id
+        LEFT JOIN expense_line el ON el.move_id = am.id
+        LEFT JOIN line_totals lt ON lt.move_id = am.id
+        LEFT JOIN ewt ON ewt.move_id = am.id
+        CROSS JOIN params p
+        WHERE am.move_type = 'in_invoice'
+            AND am.state = 'posted'
+            AND am.payment_state IN ('not_paid', 'partial')
+            AND ap_line.outstanding_amount <> 0
+        ORDER BY rp.name, am.invoice_date_due;
+    """,
+    'aging_ar': """
+        WITH params AS (
+            SELECT %s::date AS date_from, %s::date AS date_to
+        ),
+        ar_line AS (
+            SELECT aml.move_id, SUM(aml.balance) AS outstanding_amount
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aa.account_type = 'asset_receivable'
+            GROUP BY aml.move_id
+        )
+        SELECT
+            am.invoice_date AS "SI DATE",
+            rp.name AS "NAME OF CUSTOMER",
+            COALESCE(sp.name, '') AS "SALES REPRESENTATIVE",
+            am.name AS "REFERENCE",
+            '' AS "DELIVERY RECEIPT",
+            '' AS "OTHERS",
+            COALESCE(pt.name->>'en_US', '') AS "TERMS",
+            1 AS "FX RATE",
+            0 AS "SALES INVOICE AMOUNT (USD)",
+            am.amount_total AS "SALES INVOICE AMOUNT (PHP)",
+            am.invoice_date_due AS "DUE DATE",
+            p.date_to AS "REPORT DATE",
+            (p.date_to - am.invoice_date_due) AS "NO. OF DAYS OVERDUE",
+            CASE WHEN am.invoice_date_due >= p.date_to THEN ar_line.outstanding_amount ELSE 0 END AS "CURRENT",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 1 AND 30 THEN ar_line.outstanding_amount ELSE 0 END AS "[01-30]",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 31 AND 60 THEN ar_line.outstanding_amount ELSE 0 END AS "[31-60]",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 61 AND 90 THEN ar_line.outstanding_amount ELSE 0 END AS "[61-90]",
+            CASE WHEN (p.date_to - am.invoice_date_due) BETWEEN 91 AND 120 THEN ar_line.outstanding_amount ELSE 0 END AS "[91-120]",
+            CASE WHEN (p.date_to - am.invoice_date_due) > 120 THEN ar_line.outstanding_amount ELSE 0 END AS "[121-over]",
+            ar_line.outstanding_amount AS "TOTAL RECEIVABLE"
+        FROM account_move am
+        JOIN res_partner rp ON rp.id = am.partner_id
+        JOIN ar_line ON ar_line.move_id = am.id
+        LEFT JOIN account_payment_term pt ON pt.id = am.invoice_payment_term_id
+        LEFT JOIN res_users ru ON am.invoice_user_id = ru.id
+        LEFT JOIN res_partner sp ON ru.partner_id = sp.id
+        CROSS JOIN params p
+        WHERE am.move_type = 'out_invoice'
+            AND am.state = 'posted'
+            AND am.payment_state IN ('not_paid', 'partial')
+            AND ar_line.outstanding_amount <> 0
+        ORDER BY rp.name, am.invoice_date_due;
+    """,
 }
 SQL_QUERIES['form_1601eq'] = SQL_QUERIES['qap_summary']
 
@@ -1637,7 +1859,108 @@ class SqlReport(models.Model):
             )
 
             lines = [header] + detail_lines
+        elif self.name == 'vat_summary_purchase':
+            period = self.to_date.strftime('%m/%d/%Y')
+            company_tin = agent_tin
+            company_name = company.name or ''
+            trade_name = company.name or ''
+            company_address = company.partner_id.contact_address_complete or ''
+            rdo_code = company.rdo_code or ''
+            fiscal_year_end = '12'  # calendar-year default; no field for this on res.company yet
 
+            total_exempt = 0.0
+            total_zero_rated = 0.0
+            total_service = 0.0
+            total_capital = 0.0
+            total_other_goods = 0.0
+            total_vat = 0.0
+            detail_lines = []
+
+            for row in rows:
+                supplier_tin = (row.get("TAX PAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+                supplier_name = row.get("REGISTERED NAME") or ''
+                supplier_address = row.get("SUPPLIER ADDRESS") or ''  # not split into street/city upstream
+
+                exempt = _to_float(row.get("AMOUNT OF EXEMPT PURCHASE"))
+                zero_rated = _to_float(row.get("AMOUNT OF ZERO-RATED PURCHASE"))
+                service = _to_float(row.get("AMOUNT OF PURCHASE OF SERVICES"))
+                capital = _to_float(row.get("AMOUNT OF PURCHASE OF CAPITAL GOODS"))
+                other_goods = _to_float(row.get("AMOUNT OF PURCHASE OF GOODS OTHER THAN CAPITAL GOODS"))
+                vat_amount = _to_float(row.get("AMOUNT OF INPUT TAX"))
+
+                total_exempt += exempt
+                total_zero_rated += zero_rated
+                total_service += service
+                total_capital += capital
+                total_other_goods += other_goods
+                total_vat += vat_amount
+
+                detail_lines.append(
+                    f'D,P,{supplier_tin},{supplier_name},,,,{supplier_address},,'
+                    f'{exempt:.2f},{zero_rated:.2f},{service:.2f},{capital:.2f},{other_goods:.2f},'
+                    f'{vat_amount:.2f},{company_tin},{period}'
+                )
+
+            header = (
+                f'H,P,{company_tin},{company_name},,,,{trade_name},{company_address},,'
+                f'{total_exempt:.2f},{total_zero_rated:.2f},{total_service:.2f},{total_capital:.2f},'
+                f'{total_other_goods:.2f},{total_vat:.2f},{total_vat:.2f},0.00,'
+                f'{rdo_code},{period},{fiscal_year_end}'
+            )
+
+            lines = [header] + detail_lines
+
+        elif self.name == 'vat_summary_purchase':
+            period = self.to_date.strftime('%m/%d/%Y')
+            company_tin = agent_tin
+            company_name = company.name or ''
+            trade_name = company.name or ''
+            company_address = company.partner_id.contact_address_complete or ''
+            rdo_code = company.rdo_code or ''
+            fiscal_year_end = '12'  # calendar-year default; no field for this on res.company yet
+
+            total_exempt = 0.0
+            total_zero_rated = 0.0
+            total_service = 0.0
+            total_capital = 0.0
+            total_other_goods = 0.0
+            total_vat = 0.0
+            detail_lines = []
+
+            for row in rows:
+                supplier_tin = (row.get("TAX PAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+                supplier_name = row.get("REGISTERED NAME") or ''
+                supplier_address = row.get("SUPPLIER ADDRESS") or ''  # not split into street/city upstream
+
+                exempt = _to_float(row.get("AMOUNT OF EXEMPT PURCHASE"))
+                zero_rated = _to_float(row.get("AMOUNT OF ZERO-RATED PURCHASE"))
+                service = _to_float(row.get("AMOUNT OF PURCHASE OF SERVICES"))
+                capital = _to_float(row.get("AMOUNT OF PURCHASE OF CAPITAL GOODS"))
+                other_goods = _to_float(row.get("AMOUNT OF PURCHASE OF GOODS OTHER THAN CAPITAL GOODS"))
+                vat_amount = _to_float(row.get("AMOUNT OF INPUT TAX"))
+
+                total_exempt += exempt
+                total_zero_rated += zero_rated
+                total_service += service
+                total_capital += capital
+                total_other_goods += other_goods
+                total_vat += vat_amount
+
+                detail_lines.append(
+                    f'D,P,{supplier_tin},{supplier_name},,,,{supplier_address},,'
+                    f'{exempt:.2f},{zero_rated:.2f},{service:.2f},{capital:.2f},{other_goods:.2f},'
+                    f'{vat_amount:.2f},{company_tin},{period}'
+                )
+
+            header = (
+                f'H,P,{company_tin},{company_name},,,,{trade_name},{company_address},,'
+                f'{total_exempt:.2f},{total_zero_rated:.2f},{total_service:.2f},{total_capital:.2f},'
+                f'{total_other_goods:.2f},{total_vat:.2f},{total_vat:.2f},0.00,'
+                f'{rdo_code},{period},{fiscal_year_end}'
+            )
+
+            lines = [header] + detail_lines
+            
         dat_content = "\n".join(lines)
         attachment = self.env['ir.attachment'].create({
             'name': f"{self.name}.dat",
