@@ -4,6 +4,11 @@ from datetime import date
 class Purchase(models.Model):
     _inherit = 'purchase.order'
 
+    def print_quotation(self):
+        return self.env.ref(
+            'itc_internal_dev.action_report_purchase_quotation_custom'
+        ).report_action(self)
+
     x_vendor_tin = fields.Char(
         string="Vendor TIN",
         related='partner_id.vat',

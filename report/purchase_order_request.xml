@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+  <!-- ===========================
+       QWeb Template: Request for Quotation (RFQ)
+  ============================ -->
+  <template id="report_purchase_quotation_custom">
+    <t t-call="web.html_container">
+      <t t-foreach="docs" t-as="doc">
+
+        <!-- ================= HEADER ================= -->
+        <div class="header" style="font-family: Arial, sans-serif; padding: 10px 20px 10px 20px;">
+          <div style="width:100%; overflow:hidden;">
+
+            <!-- LEFT: Company Info -->
+            <div style="width:60%; float:left; font-size:13px; line-height:1.6;">
+              <div style="font-size:17px; font-weight:bold; margin-bottom:4px;">
+                <t t-esc="doc.company_id.name"/>
+              </div>
+              <div>
+                <t t-esc="(doc.company_id.partner_id.street or '').upper()"/>
+                <t t-if="doc.company_id.partner_id.street2">
+                  , <t t-esc="doc.company_id.partner_id.street2.upper()"/>
+                </t>
+                <t t-if="doc.company_id.partner_id.city">
+                  , <t t-esc="doc.company_id.partner_id.city.upper()"/>
+                </t>
+                <t t-if="doc.company_id.partner_id.zip">
+                  <t t-esc="doc.company_id.partner_id.zip"/>
+                </t>
+              </div>
+              <div>
+                VAT REG TIN: <t t-esc="doc.company_id.vat or ''"/>
+              </div>
+              <div>
+                Business Style: <t t-esc="doc.company_id.name"/>
+              </div>
+            </div>
+
+            <!-- RIGHT: Document Title -->
+            <div style="width:38%; float:right; text-align:right; font-size:20px; font-weight:bold; letter-spacing:2px; padding-top:8px;">
+              PURCHASE REQUISITION
+            </div>
+
+            <div style="clear:both;"/>
+          </div>
+
+          <!-- ===== HR LINE (ibalik) ===== -->
+          <div style="border-bottom:1.5px solid #000; margin-top:12px; margin-bottom:0;"></div>
+        </div>
+
+        <!-- ================= PAGE CONTENT ================= -->
+        <div class="article" t-att-data-oe-model="doc._name" t-att-data-oe-id="doc.id">
+          <div class="page" style="font-family: Arial, sans-serif; font-size: 14px; line-height:1.5; padding: 150px 40px 40px 40px;">
+            <main>
+
+              <!-- ================= PAYEE / AMOUNT / PR NO / DATE ================= -->
+              <div style="width:100%; font-size:14px; margin-bottom:25px; margin-top:20px; overflow:hidden;">
+
+                <!-- LEFT -->
+                <div style="width:55%; float:left; box-sizing:border-box;">
+                  <div style="margin-bottom:10px;">
+                    <strong>Payee:</strong>
+                    <t t-esc="doc.partner_id.name or ''"/>
+                  </div>
+                  <div style="margin-bottom:4px;">
+                    <strong>Amount in words:</strong>
+                    ***<t t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/>***
+                  </div>
+                  <div>
+                    ONLY***
+                  </div>
+                </div>
+
+                <!-- RIGHT -->
+                <div style="width:40%; float:right; box-sizing:border-box;">
+                  <div style="margin-bottom:10px;">
+                    <strong>PR No.</strong>
+                    <t t-esc="doc.name or ''"/>
+                  </div>
+                  <div>
+                    <strong>Date:</strong>
+                    <t t-esc="doc.date_order.strftime('%Y-%m-%d') if doc.date_order else ''"/>
+                  </div>
+                </div>
+
+                <div style="clear:both;"/>
+              </div>
+
+              <!-- ============================================ -->
+              <!-- TABLE 1: RFQ Lines -->
+              <!-- ============================================ -->
+              <table style="width:100%; border:1.5px solid black; border-collapse:collapse; font-size:14px; margin-bottom:30px;">
+
+                <thead>
+                  <tr>
+                    <th style="border:1.5px solid black; padding:10px 8px; text-align:center; font-weight:bold; width:80px;">
+                      Quantity
+                    </th>
+                    <th style="border:1.5px solid black; padding:10px 8px; text-align:center; font-weight:bold; width:70px;">
+                      UOM
+                    </th>
+                    <th style="border:1.5px solid black; padding:10px 8px; text-align:center; font-weight:bold;">
+                      Description
+                    </th>
+                    <th style="border:1.5px solid black; padding:10px 8px; text-align:center; font-weight:bold; width:110px;">
+                      Unit Amount
+                    </th>
+                    <th style="border:1.5px solid black; padding:10px 8px; text-align:center; font-weight:bold; width:110px;">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <t t-foreach="range(max(5, len(doc.order_line)))" t-as="row_index">
+                    <tr>
+                      <t t-if="row_index &lt; len(doc.order_line)">
+                        <td style="border-left:1.5px solid black; border-right:1.5px solid black; padding:10px 8px; text-align:center;">
+                          <t t-esc="'{:,.2f}'.format(doc.order_line[row_index].product_qty or 0)"/>
+                        </td>
+                        <td style="border-left:1.5px solid black; border-right:1.5px solid black; padding:10px 8px; text-align:center;">
+                          <t t-esc="doc.order_line[row_index].product_uom.name or ''"/>
+                        </td>
+                        <td style="border-left:1.5px solid black; border-right:1.5px solid black; padding:10px 8px;">
+                          <t t-esc="doc.order_line[row_index].name or ''"/>
+                        </td>
+                        <td style="border-left:1.5px solid black; border-right:1.5px solid black; padding:10px 8px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(doc.order_line[row_index].price_unit or 0)"/>
+                        </td>
+                        <td style="border-left:1.5px solid black; border-right:1.5px solid black; padding:10px 8px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(doc.order_line[row_index].price_subtotal or 0)"/>
+                        </td>
+                      </t>
+                      <t t-else="">
+                        <td t-foreach="range(5)" t-as="col" style="border-left:1.5px solid black; border-right:1.5px solid black; padding:10px 8px; height:32px;">&#160;</td>
+                      </t>
+                    </tr>
+                  </t>
+                </tbody>
+
+                <tfoot>
+                  <tr>
+                    <td colspan="3" style="border:1.5px solid black; padding:10px 8px; text-align:left; font-weight:bold;">
+                      Date Needed:
+                      <t t-esc="doc.date_planned.strftime('%m/%d/%Y') if doc.date_planned else ''"/>
+                    </td>
+                    <td style="border:1.5px solid black; padding:10px 8px; text-align:right; font-weight:bold;">
+                      Total:
+                    </td>
+                    <td style="border:1.5px solid black; padding:10px 8px; text-align:right; font-weight:bold;">
+                      <t t-esc="'{:,.2f}'.format(doc.amount_total or 0)"/>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <!-- ============================================ -->
+              <!-- TABLE 2: REMARKS -->
+              <!-- ============================================ -->
+              <table style="width:100%; border:1.5px solid black; border-collapse:collapse; font-size:14px; margin-bottom:40px;">
+                <tr>
+                  <td style="border:1.5px solid black; padding:8px 12px; font-weight:bold;">
+                    Remarks
+                  </td>
+                </tr>
+                <tr>
+                  <td style="border:1.5px solid black; padding:15px 12px; min-height:80px; height:80px; vertical-align:top;">
+                    <t t-esc="doc.x_remarks or ''"/>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- ============================================ -->
+              <!-- TABLE 3: SIGNATORIES -->
+              <!-- ============================================ -->
+              <table style="width:100%; border:1.5px solid black; border-collapse:collapse; font-size:14px; margin-top:40px;">
+                <tr>
+                  <!-- Requested By -->
+                  <td style="border:1.5px solid black; padding:20px 12px 25px 12px; text-align:center; vertical-align:top; width:33.33%;">
+                    <div style="font-size:12px; text-align:left; margin-bottom:40px;">
+                      Requested By:
+                    </div>
+                    <div style="border-top:1.5px solid #000; width:90%; margin:0 auto; padding-top:6px;">
+                      <div style="font-size:13px;">&#160;</div>
+                      <div style="font-size:11px;">(Signature over printed name)</div>
+                    </div>
+                  </td>
+
+                  <!-- Noted By -->
+                  <td style="border:1.5px solid black; padding:20px 12px 25px 12px; text-align:center; vertical-align:top; width:33.33%;">
+                    <div style="font-size:12px; text-align:left; margin-bottom:40px;">
+                      Noted By:
+                    </div>
+                    <div style="border-top:1.5px solid #000; width:90%; margin:0 auto; padding-top:6px;">
+                      <div style="font-size:13px;">&#160;</div>
+                      <div style="font-size:11px;">(Signature over printed name)</div>
+                    </div>
+                  </td>
+
+                  <!-- Checked By -->
+                  <td style="border:1.5px solid black; padding:20px 12px 25px 12px; text-align:center; vertical-align:top; width:33.33%;">
+                    <div style="font-size:12px; text-align:left; margin-bottom:40px;">
+                      Checked By:
+                    </div>
+                    <div style="border-top:1.5px solid #000; width:90%; margin:0 auto; padding-top:6px;">
+                      <div style="font-size:13px;">&#160;</div>
+                      <div style="font-size:11px;">(Signature over printed name)</div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+            </main>
+          </div>
+        </div>
+      </t>
+    </t>
+  </template>
+
+  <!-- ===========================
+       REPORT ACTION
+  ============================ -->
+  <record id="action_report_purchase_quotation_custom" model="ir.actions.report">
+    <field name="name">Request Quotation Report</field>
+    <field name="model">purchase.order</field>
+    <field name="report_type">qweb-pdf</field>
+    <field name="report_name">itc_internal_dev.report_purchase_quotation_custom</field>
+    <field name="report_file">itc_internal_dev.report_purchase_quotation_custom</field>
+    <field name="print_report_name">'Request for Quotation - %s' % (object.name)</field>
+    <field name="binding_model_id" ref="purchase.model_purchase_order"/>
+    <field name="binding_type">report</field>
+    <field name="paperformat_id" ref="a4_paperformat"/>
+  </record>
+</odoo>
