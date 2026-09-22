@@ -25,11 +25,11 @@
                             class="oe_highlight"
                             invisible="move_type != 'out_invoice' or x_invoice_type != 'consu'"/>
                             
-                    <button name="%(action_report_custom_acknowledgement_receipt)d"
+                    <!-- <button name="%(action_report_custom_acknowledgement_receipt)d"
                             string="Print Acknowledgement Receipt"
                             type="action"
                             class="oe_highlight"
-                            invisible="payment_state != 'paid' or move_type != 'out_invoice'"/>
+                            invisible="payment_state != 'paid' or move_type != 'out_invoice'"/> -->
 
 
                     <button name="action_print"

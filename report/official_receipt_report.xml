@@ -29,7 +29,7 @@
             <table style="width:100%; margin-bottom:15px; font-size:13px; border-collapse:collapse;">
               <tr>
                 <td style="width:60%; vertical-align:top; padding:5px; border:1px solid black;">
-                  <strong style="font-size:18px;">OFFICIAL RECEIPT</strong><br/>
+                  <strong style="font-size:18px;">COLLECTION RECEIPT</strong><br/>
                   <strong>OR NO.:</strong> <span t-field="doc.name"/><br/>
                   <strong>BR:</strong> BR-00000-MAIN
                 </td>
