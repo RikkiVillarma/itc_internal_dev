@@ -291,6 +291,25 @@ SQL_QUERIES = {
                 a.invoice_date,
                 a.name;
         """,
+    'cash_receipt_journal': """
+        SELECT
+            ap.date AS "DATE",
+            ap.name AS "CR NUMBER",
+            ap.state AS "PAYMENT STATE",
+            rp.name AS "CUSTOMER",
+            rp.vat AS "TIN",
+            ap.memo AS "REFERENCE INVOICE",
+            ap.amount AS "AMOUNT RECEIVED",
+            aj.name->>'en_US' AS "JOURNAL"
+        FROM account_payment ap
+        JOIN account_journal aj ON aj.id = ap.journal_id
+        LEFT JOIN res_partner rp ON rp.id = ap.partner_id
+        WHERE ap.payment_type = 'inbound'
+            AND ap.state = 'paid'
+            AND aj.type = 'cash'
+            AND ap.date BETWEEN %s AND %s
+        ORDER BY ap.date, ap.name;
+    """,
     'disbursement_journal': """
         WITH pay_bill AS (
             SELECT DISTINCT
