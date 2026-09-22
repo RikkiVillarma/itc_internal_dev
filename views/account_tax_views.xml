@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Inherit ang account.tax list view para magdagdag ng Amount column sa popup -->
+    <record id="view_tax_tree_inherit_amount" model="ir.ui.view">
+        <field name="name">account.tax.tree.inherit.amount</field>
+        <field name="model">account.tax</field>
+        <field name="inherit_id" ref="account.account_tax_view_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='display_name']" position="after">
+                <field name="amount_display" string="Amount"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
