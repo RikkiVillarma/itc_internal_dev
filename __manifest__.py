@@ -75,6 +75,7 @@
         'views/disbursement_payment_views.xml',
         'views/disbursement_menu.xml',
         'views/request_for_payment_views.xml',
+        'views/account_tax_views.xml',
        
 
     ],
