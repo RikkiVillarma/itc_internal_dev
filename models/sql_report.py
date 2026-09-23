@@ -176,120 +176,23 @@ SQL_QUERIES = {
         """,
         'purchase_journal': """
             SELECT
-                a.invoice_date AS "TRANSACTION DATE",
-                a.name AS "AP NUMBER",
-                '' AS "DV NUMBER",
-                '' AS "OTHERS",
-                r.name AS "NAME OF PAYEE/SUPPLIER",
+                po.date_order AS "DATE",
+                po.name AS "PO NUMBER",
+                r.name AS "SUPPLIER",
                 r.contact_address_complete AS "ADDRESS",
                 r.vat AS "TIN",
-                a.invoice_date AS "REF DATE",
-                a.name AS "PRIMARY",
-                '' AS "SUPPLEMENTARY",
-                '' AS "OTHERS",
-                a.amount_total AS "GROSS AMOUNT",
-                a.amount_tax AS "ACTUAL INPUT TAX 12%%",
-                a.amount_untaxed AS "NET OF VAT",
-
-                SUM(
-                    CASE
-                        WHEN l.product_id IS NOT NULL
-                            AND l.account_id IS NOT NULL
-                            AND l.price_subtotal <= 1000000
-                        THEN l.price_subtotal
-                        ELSE 0
-                    END
-                ) AS "CAPITAL GOODS (AGGREGATE NOT EXCEEDING 1M)",
-
-                SUM(
-                    CASE
-                        WHEN l.product_id IS NOT NULL
-                            AND l.account_id IS NOT NULL
-                            AND l.price_subtotal > 1000000
-                        THEN l.price_subtotal
-                        ELSE 0
-                    END
-                ) AS "CAPITAL GOODS (AGGREGATE EXCEEDING 1M)",
-
-                SUM(
-                    CASE
-                        WHEN l.product_id IS NOT NULL
-                            AND l.account_id IS NULL
-                            AND pt.type = 'consu'
-                        THEN l.price_subtotal
-                        ELSE 0
-                    END
-                ) AS "PURCHASE OTHER THAN CAPITAL GOODS",
-
-                SUM(
-                    CASE
-                        WHEN l.product_id IS NOT NULL
-                            AND pt.type = 'service'
-                            AND a.partner_id IS NOT NULL
-                        THEN l.price_subtotal
-                        ELSE 0
-                    END
-                ) AS "DOMESTIC PURCHASE OF SERVICES",
-
-                SUM(
-                    CASE
-                        WHEN l.is_imported = TRUE
-                        THEN l.price_subtotal
-                        ELSE 0
-                    END
-                ) AS "IMPORTATION PURCHASES",
-
-                SUM(
-                    CASE
-                        WHEN t.amount = 0
-                        THEN l.price_subtotal
-                        ELSE 0
-                    END
-                ) AS "PURCHASE NOT QUALIFIED TO INPUT TAX",
-
-                SUM(
-                    CASE
-                        WHEN l.product_id IS NULL
-                        THEN a.amount_total
-                        ELSE 0
-                    END
-                ) AS "OTHERS",
-
-                '' AS "ACCOUNT TITLE",
-                '' AS "ATC",
-                '' AS "RATE",
-                '' AS "AMOUNT",
-                '' AS "ALLOWED INPUT TAX",
-                '' AS "DISALLOWED INPUT TAX",
-                '' AS "DEFERRED INPUT TAX"
-
-            FROM account_move a
-            LEFT JOIN account_move_line l
-                ON a.id = l.move_id
-            LEFT JOIN product_product pp
-                ON l.product_id = pp.id
-            LEFT JOIN product_template pt
-                ON pp.product_tmpl_id = pt.id
-            LEFT JOIN res_partner r
-                ON a.partner_id = r.id
-            LEFT JOIN account_move_line_account_tax_rel rel
-                ON l.id = rel.account_move_line_id
-            LEFT JOIN account_tax t
-                ON rel.account_tax_id = t.id
-
-            WHERE a.move_type = 'in_invoice'
-                AND a.state = 'posted'
-                AND a.invoice_date BETWEEN %s AND %s
-
-            GROUP BY
-                a.id,
-                r.name,
-                r.contact_address_complete,
-                r.vat
-
-            ORDER BY
-                a.invoice_date,
-                a.name;
+                po.partner_ref AS "SUPPLIER REFERENCE",
+                po.amount_untaxed AS "NET OF VAT",
+                po.amount_tax AS "INPUT TAX 12%%",
+                po.amount_total AS "GROSS AMOUNT",
+                po.state AS "STATUS",
+                COALESCE(pt.name->>'en_US', '') AS "PAYMENT TERMS"
+            FROM purchase_order po
+            LEFT JOIN res_partner r ON r.id = po.partner_id
+            LEFT JOIN account_payment_term pt ON pt.id = po.payment_term_id
+            WHERE po.state IN ('purchase', 'done')
+                AND po.date_order BETWEEN %s AND %s
+            ORDER BY po.date_order, po.name;
         """,
     'cash_receipt_journal': """
         SELECT
