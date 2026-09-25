@@ -317,13 +317,8 @@
     <field name="model">account.payment</field>
     <field name="report_type">qweb-pdf</field>
     <field name="report_name">itc_internal_dev.report_custom_acknowledgement_receipt_template</field>
-<<<<<<< HEAD
-    <field name="print_report_name">'Acknowledgment Receipt - %s' % (object.name)</field>
-    <field name="binding_model_id" ref="account.model_account_payment"/>
-=======
     <field name="print_report_name">'Acknowledgment Receipt - %s' % (object.name.replace('SI', 'AR'))</field>
     <field name="binding_model_id" ref="account.model_account_move"/>
->>>>>>> c9497c7c40895c517d31d5437c582fdd15887160
     <field name="binding_type">report</field>
 </record>
 
