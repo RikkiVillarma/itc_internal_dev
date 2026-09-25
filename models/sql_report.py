@@ -182,12 +182,19 @@ SQL_QUERIES = {
                 r.contact_address_complete AS "ADDRESS",
                 r.vat AS "TIN",
                 po.partner_ref AS "SUPPLIER REFERENCE",
-                po.amount_untaxed AS "NET OF VAT",
-                po.amount_tax AS "INPUT TAX 12%%",
-                po.amount_total AS "GROSS AMOUNT",
-                po.state AS "STATUS",
-                COALESCE(pt.name->>'en_US', '') AS "PAYMENT TERMS"
+                am.amount_untaxed AS "NET OF VAT",
+                am.amount_tax AS "INPUT TAX 12%%",
+                am.amount_total AS "GROSS AMOUNT",
+                am.name AS "BILL NUMBER",
+                am.invoice_date AS "BILL DATE",
+                am.payment_state AS "BILL STATUS",
+                pt.name->>'en_US' AS "PAYMENT TERMS"
             FROM purchase_order po
+            INNER JOIN account_move am 
+                ON po.name = am.invoice_origin
+                AND am.move_type = 'in_invoice'
+                AND am.state = 'posted'
+                AND am.payment_state = 'paid'
             LEFT JOIN res_partner r ON r.id = po.partner_id
             LEFT JOIN account_payment_term pt ON pt.id = po.payment_term_id
             WHERE po.state IN ('purchase', 'done')
@@ -900,79 +907,82 @@ SQL_QUERIES = {
         ORDER BY sm.date;
         """,
         'vat_summary_purchase': """
-                WITH params AS (
-                    SELECT %s::date AS date_from, %s::date AS date_to
-                ),
-                hdr AS (
-                    SELECT
-                        am.id,
-                        am.partner_id,
-                        COALESCE(NULLIF(TRIM(am.x_partner_tin), ''), '__PARTNER_' || am.partner_id::text) AS tin_key,
-                        am.x_partner_tin,
-                        rp.name,
-                        rp.contact_address_complete,
-                        am.amount_untaxed + am.amount_tax AS gross_purchase,
-                        am.amount_tax AS input_tax,
-                        am.amount_untaxed AS taxable_purchase
-                    FROM account_move am
-                    JOIN res_partner rp ON rp.id = am.partner_id
-                    CROSS JOIN params p
-                    WHERE am.move_type = 'in_invoice'
-                        AND am.state = 'posted'
-                        AND am.payment_state = 'paid'
-                        AND am.invoice_date BETWEEN p.date_from AND p.date_to
-                ),
-                line_values AS (
-                    SELECT
-                        l.id,
-                        l.move_id,
-                        l.price_subtotal,
-                        pt.type AS product_type,
-                        aa.code_store->>'1' AS account_code,
-                        BOOL_OR(tag.name->>'en_US' ILIKE '%%46E%%') AS is_exempt,
-                        BOOL_OR(tag.name->>'en_US' ILIKE '%%46ZR%%') AS is_zero_rated,
-                        BOOL_OR(tag.name->>'en_US' ILIKE '%%42A%%') AS is_taxable
-                    FROM account_move_line l
-                    LEFT JOIN product_product pp ON pp.id = l.product_id
-                    LEFT JOIN product_template pt ON pt.id = pp.product_tmpl_id
-                    LEFT JOIN account_account aa ON aa.id = l.account_id
-                    LEFT JOIN account_account_tag_account_move_line_rel tagrel ON tagrel.account_move_line_id = l.id
-                    LEFT JOIN account_account_tag tag ON tag.id = tagrel.account_account_tag_id
-                    WHERE l.product_id IS NOT NULL
-                    GROUP BY l.id, l.move_id, l.price_subtotal, pt.type, aa.code_store
-                ),
-                line_totals AS (
-                    SELECT
-                        move_id,
-                        SUM(CASE WHEN is_exempt THEN price_subtotal ELSE 0 END) AS exempt_purchase,
-                        SUM(CASE WHEN is_zero_rated THEN price_subtotal ELSE 0 END) AS zero_rated_purchase,
-                        SUM(CASE WHEN is_taxable THEN price_subtotal ELSE 0 END) AS taxable_purchase,
-                        SUM(CASE WHEN is_taxable AND product_type = 'service' THEN price_subtotal ELSE 0 END) AS service_purchase,
-                        SUM(CASE WHEN is_taxable AND account_code IN ('1101','1102','1103','1104','1105') THEN price_subtotal ELSE 0 END) AS capital_goods,
-                        SUM(CASE WHEN is_taxable AND product_type != 'service' AND account_code NOT IN ('1101','1102','1103','1104','1105') THEN price_subtotal ELSE 0 END) AS other_goods
-                    FROM line_values
-                    GROUP BY move_id
-                )
+            WITH params AS (
+                SELECT %s::date AS date_from, %s::date AS date_to
+            ),
+            hdr AS (
                 SELECT
-                    ROW_NUMBER() OVER (ORDER BY MAX(hdr.name)) AS "SEQ NO",
-                    MAX(hdr.x_partner_tin) AS "TAX PAYER IDENTIFICATION NUMBER",
-                    MAX(hdr.name) AS "REGISTERED NAME",
-                    '' AS "NAME OF SUPPLIER (LAST NAME, FIRST NAME, MIDDLE NAME)",
-                    MAX(hdr.contact_address_complete) AS "SUPPLIER ADDRESS",
-                    SUM(hdr.gross_purchase) AS "AMOUNT OF GROSS PURCHASE",
-                    SUM(COALESCE(lt.exempt_purchase, 0)) AS "AMOUNT OF EXEMPT PURCHASE",
-                    SUM(COALESCE(lt.zero_rated_purchase, 0)) AS "AMOUNT OF ZERO-RATED PURCHASE",
-                    SUM(COALESCE(lt.taxable_purchase, 0)) AS "AMOUNT OF TAXABLE PURCHASE",
-                    SUM(COALESCE(lt.service_purchase, 0)) AS "AMOUNT OF PURCHASE OF SERVICES",
-                    SUM(COALESCE(lt.capital_goods, 0)) AS "AMOUNT OF PURCHASE OF CAPITAL GOODS",
-                    SUM(COALESCE(lt.other_goods, 0)) AS "AMOUNT OF PURCHASE OF GOODS OTHER THAN CAPITAL GOODS",
-                    SUM(hdr.input_tax) AS "AMOUNT OF INPUT TAX",
-                    SUM(hdr.taxable_purchase) AS "AMOUNT OF GROSS TAXABLE PURCHASE"
-                FROM hdr
-                LEFT JOIN line_totals lt ON lt.move_id = hdr.id
-                GROUP BY hdr.tin_key
-                ORDER BY MAX(hdr.name);
-            """,
+                    am.id AS move_id,
+                    am.partner_id,
+                    COALESCE(NULLIF(TRIM(am.x_partner_tin), ''), '__PARTNER_' || am.partner_id::text) AS tin_key,
+                    am.x_partner_tin,
+                    rp.name,
+                    rp.contact_address_complete,
+                    am.amount_untaxed + am.amount_tax AS gross_purchase,
+                    am.amount_tax AS input_tax,
+                    am.amount_untaxed AS taxable_purchase
+                FROM purchase_order po
+                INNER JOIN account_move am 
+                    ON po.name = am.invoice_origin
+                    AND am.move_type = 'in_invoice'
+                    AND am.state = 'posted'
+                    AND am.payment_state = 'paid'
+                JOIN res_partner rp ON rp.id = am.partner_id
+                CROSS JOIN params p
+                WHERE po.state IN ('purchase', 'done')
+                    AND po.date_order BETWEEN p.date_from AND p.date_to
+            ),
+            line_values AS (
+                SELECT
+                    l.id,
+                    l.move_id,
+                    l.price_subtotal,
+                    pt.type AS product_type,
+                    aa.code_store->>'1' AS account_code,
+                    BOOL_OR(tag.name->>'en_US' ILIKE '%%46E%%') AS is_exempt,
+                    BOOL_OR(tag.name->>'en_US' ILIKE '%%46ZR%%') AS is_zero_rated,
+                    BOOL_OR(tag.name->>'en_US' ILIKE '%%42A%%') AS is_taxable
+                FROM account_move_line l
+                LEFT JOIN product_product pp ON pp.id = l.product_id
+                LEFT JOIN product_template pt ON pt.id = pp.product_tmpl_id
+                LEFT JOIN account_account aa ON aa.id = l.account_id
+                LEFT JOIN account_account_tag_account_move_line_rel tagrel ON tagrel.account_move_line_id = l.id
+                LEFT JOIN account_account_tag tag ON tag.id = tagrel.account_account_tag_id
+                WHERE l.product_id IS NOT NULL
+                GROUP BY l.id, l.move_id, l.price_subtotal, pt.type, aa.code_store
+            ),
+            line_totals AS (
+                SELECT
+                    move_id,
+                    SUM(CASE WHEN is_exempt THEN price_subtotal ELSE 0 END) AS exempt_purchase,
+                    SUM(CASE WHEN is_zero_rated THEN price_subtotal ELSE 0 END) AS zero_rated_purchase,
+                    SUM(CASE WHEN is_taxable THEN price_subtotal ELSE 0 END) AS taxable_purchase,
+                    SUM(CASE WHEN is_taxable AND product_type = 'service' THEN price_subtotal ELSE 0 END) AS service_purchase,
+                    SUM(CASE WHEN is_taxable AND account_code IN ('1101','1102','1103','1104','1105') THEN price_subtotal ELSE 0 END) AS capital_goods,
+                    SUM(CASE WHEN is_taxable AND product_type != 'service' AND account_code NOT IN ('1101','1102','1103','1104','1105') THEN price_subtotal ELSE 0 END) AS other_goods
+                FROM line_values
+                GROUP BY move_id
+            )
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY MAX(hdr.name)) AS "SEQ NO",
+                MAX(hdr.x_partner_tin) AS "TAX PAYER IDENTIFICATION NUMBER",
+                MAX(hdr.name) AS "REGISTERED NAME",
+                '' AS "NAME OF SUPPLIER (LAST NAME, FIRST NAME, MIDDLE NAME)",
+                MAX(hdr.contact_address_complete) AS "SUPPLIER ADDRESS",
+                SUM(hdr.gross_purchase) AS "AMOUNT OF GROSS PURCHASE",
+                SUM(COALESCE(lt.exempt_purchase, 0)) AS "AMOUNT OF EXEMPT PURCHASE",
+                SUM(COALESCE(lt.zero_rated_purchase, 0)) AS "AMOUNT OF ZERO-RATED PURCHASE",
+                SUM(COALESCE(lt.taxable_purchase, 0)) AS "AMOUNT OF TAXABLE PURCHASE",
+                SUM(COALESCE(lt.service_purchase, 0)) AS "AMOUNT OF PURCHASE OF SERVICES",
+                SUM(COALESCE(lt.capital_goods, 0)) AS "AMOUNT OF PURCHASE OF CAPITAL GOODS",
+                SUM(COALESCE(lt.other_goods, 0)) AS "AMOUNT OF PURCHASE OF GOODS OTHER THAN CAPITAL GOODS",
+                SUM(hdr.input_tax) AS "AMOUNT OF INPUT TAX",
+                SUM(hdr.taxable_purchase) AS "AMOUNT OF GROSS TAXABLE PURCHASE"
+            FROM hdr
+            LEFT JOIN line_totals lt ON lt.move_id = hdr.move_id
+            GROUP BY hdr.tin_key
+            ORDER BY MAX(hdr.name);
+        """,
         'vat_summary_sales': """
             WITH params AS (
                 SELECT %s::date AS date_from, %s::date AS date_to
