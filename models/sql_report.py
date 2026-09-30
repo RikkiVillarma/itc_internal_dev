@@ -78,161 +78,6 @@ REPORT_CATEGORIES = [
     ('none', 'None'),
 ]
 
-<<<<<<< HEAD
-_DISB_SUMMARY_SQL = """
-        WITH cash_moves AS (
-            SELECT
-                aml.move_id,
-                aml.credit AS disbursed_amount,
-                aml.partner_id
-            FROM account_move_line aml
-            JOIN account_account aa ON aa.id = aml.account_id
-            JOIN account_move am ON am.id = aml.move_id
-            JOIN account_journal aj ON aj.id = am.journal_id
-            WHERE aa.account_type = 'asset_cash'
-              AND aml.credit > 0
-              AND aj.type IN ('bank', 'cash')
-              AND am.state = 'posted'
-              AND am.date BETWEEN %s AND %s
-        ),
-        pay_bill AS (
-            SELECT DISTINCT
-                cm.move_id AS payment_move_id,
-                bill_am.id AS bill_id
-            FROM cash_moves cm
-            JOIN account_move_line pay_aml
-                ON pay_aml.move_id = cm.move_id
-                AND pay_aml.full_reconcile_id IS NOT NULL
-            JOIN account_account pay_aa
-                ON pay_aa.id = pay_aml.account_id
-                AND pay_aa.account_type = 'liability_payable'
-            JOIN account_move_line bill_aml
-                ON bill_aml.full_reconcile_id = pay_aml.full_reconcile_id
-                AND bill_aml.id != pay_aml.id
-            JOIN account_move bill_am ON bill_am.id = bill_aml.move_id
-            WHERE bill_am.id != cm.move_id
-              AND (bill_am.move_type = 'in_invoice' OR bill_am.expense_sheet_id IS NOT NULL)
-        ),
-        expense_line AS (
-            SELECT DISTINCT ON (aml.move_id)
-                aml.move_id,
-                aa.name->>'en_US' AS account_title
-            FROM account_move_line aml
-            JOIN account_account aa ON aa.id = aml.account_id
-            WHERE aml.tax_line_id IS NULL AND aml.product_id IS NOT NULL
-            ORDER BY aml.move_id, aml.id
-        ),
-        payment_expense_line AS (
-            -- Direct disbursements: first non-cash, non-tax line on the same move
-            SELECT DISTINCT ON (aml.move_id)
-                aml.move_id AS payment_move_id,
-                aa.name->>'en_US' AS account_title,
-                aml.name AS line_label
-            FROM account_move_line aml
-            JOIN account_account aa ON aa.id = aml.account_id
-            WHERE aml.tax_line_id IS NULL
-              AND aa.account_type NOT IN ('asset_cash', 'asset_bank', 'asset_current')
-            ORDER BY aml.move_id, aml.id
-        ),
-        bill_amounts AS (
-            SELECT
-                bm.id AS move_id,
-                ABS(bm.amount_untaxed_signed) AS untaxed,
-                COALESCE(SUM(ABS(tl.balance)) FILTER (WHERE tx.amount > 0), 0) AS input_tax
-            FROM account_move bm
-            LEFT JOIN account_move_line tl
-                ON tl.move_id = bm.id AND tl.tax_line_id IS NOT NULL
-            LEFT JOIN account_tax tx ON tx.id = tl.tax_line_id
-            WHERE bm.move_type = 'in_invoice'
-            GROUP BY bm.id, bm.amount_untaxed_signed
-        ),
-        ewt AS (
-            SELECT
-                aml.move_id,
-                SUM(ABS(aml.credit - aml.debit)) AS ewt_amount
-            FROM account_move_line aml
-            JOIN account_tax at ON at.id = aml.tax_line_id
-            WHERE at.type_tax_use = 'purchase' AND at.amount < 0
-            GROUP BY aml.move_id
-        )
-        SELECT
-            am.create_date AS "CV ENTRY DATE",
-            am.date AS "CV RELEASED DATE",
-            am.name AS "CV NUMBER",
-            bill_am.invoice_date AS "AP DATE",
-            bill_am.name AS "AP ENTRY NUMBER",
-            rc.id AS "BRANCH CODE",
-            rc.name AS "BRANCH NAME",
-            rp.name AS "NAME OF PAYEE/SUPPLIER",
-            CASE
-                WHEN hes.id IS NOT NULL THEN CONCAT('To record reimbursement for ', COALESCE(hes.name, el.account_title, ''))
-                WHEN bill_am.id IS NOT NULL THEN CONCAT('To record payment for ', COALESCE(el.account_title, ''))
-                ELSE COALESCE(NULLIF(am.ref, ''), pel.line_label, '')
-            END AS "PARTICULARS",
-            COALESCE(el.account_title, pel.account_title, '') AS "ACCOUNT TITLE",
-            COALESCE(ba.untaxed + ba.input_tax,
-                     cm.disbursed_amount + COALESCE(ewt_pay.ewt_amount, 0)) AS "GROSS AMOUNT",
-            COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0) AS "EWT AMOUNT",
-            {extra_col}
-            (COALESCE(ba.untaxed + ba.input_tax,
-                      cm.disbursed_amount + COALESCE(ewt_pay.ewt_amount, 0))
-                - COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0)) AS "CV AMOUNT",
-            'Released' AS "STATUS"
-        FROM cash_moves cm
-        JOIN account_move am ON am.id = cm.move_id
-        LEFT JOIN res_company rc ON rc.id = am.company_id
-        LEFT JOIN pay_bill pb ON pb.payment_move_id = cm.move_id
-        LEFT JOIN account_move bill_am ON bill_am.id = pb.bill_id
-        LEFT JOIN hr_expense_sheet hes ON hes.id = bill_am.expense_sheet_id
-        LEFT JOIN res_partner rp ON rp.id = COALESCE(bill_am.partner_id, cm.partner_id)
-        LEFT JOIN expense_line el ON el.move_id = bill_am.id
-        LEFT JOIN payment_expense_line pel ON pel.payment_move_id = cm.move_id
-        LEFT JOIN bill_amounts ba ON ba.move_id = bill_am.id
-        LEFT JOIN ewt ewt_bill ON ewt_bill.move_id = bill_am.id
-        LEFT JOIN ewt ewt_pay ON ewt_pay.move_id = cm.move_id
-        ORDER BY {order_by};
-"""
-
-_DOC_REF_CTES = """
-            cash_dir AS (
-                SELECT l.move_id, BOOL_OR(l.credit > 0) AS is_outflow
-                FROM account_move_line l
-                JOIN account_account a ON a.id = l.account_id
-                WHERE a.account_type = 'asset_cash'
-                GROUP BY l.move_id
-            ),
-            pay_bill_docs AS (
-                SELECT
-                    pay_aml.move_id AS payment_move_id,
-                    STRING_AGG(DISTINCT doc_am.name, ', ' ORDER BY doc_am.name) AS doc_names
-                FROM account_move_line pay_aml
-                JOIN account_move pay_am ON pay_am.id = pay_aml.move_id
-                JOIN account_journal pay_aj ON pay_aj.id = pay_am.journal_id
-                    AND pay_aj.type IN ('bank', 'cash')
-                JOIN account_account pay_aa ON pay_aa.id = pay_aml.account_id
-                    AND pay_aa.account_type = 'liability_payable'
-                JOIN account_move_line doc_aml
-                    ON doc_aml.full_reconcile_id = pay_aml.full_reconcile_id
-                    AND doc_aml.id <> pay_aml.id
-                JOIN account_move doc_am ON doc_am.id = doc_aml.move_id
-                    AND doc_am.move_type IN ('in_invoice', 'in_refund')
-                WHERE pay_aml.full_reconcile_id IS NOT NULL
-                  AND doc_am.id <> pay_am.id
-                GROUP BY pay_aml.move_id
-            )
-"""
-
-_DOC_REF_EXPR = """
-            CASE
-                WHEN am.move_type IN ('in_invoice', 'in_refund') THEN 'AP# ' || am.name
-                WHEN am.move_type IN ('out_invoice', 'out_refund') THEN 'SI# ' || am.name
-                WHEN aj.type IN ('bank', 'cash') AND cd.move_id IS NOT NULL THEN
-                    CASE WHEN cd.is_outflow THEN 'DV# ' || COALESCE(pb.doc_names, am.name)
-                         ELSE 'CR# ' || am.name END
-                ELSE am.name
-            END
-"""
-=======
 # Tax returns a SAWT can be attached to; the code goes into every SAWT DAT record
 SAWT_FORM_TYPES = [
     ('1702Q', '1702Q'),
@@ -242,7 +87,6 @@ SAWT_FORM_TYPES = [
     ('1702', '1702 (Annual)'),
     ('1701', '1701 (Annual)'),
 ]
->>>>>>> d20674b7704f28d7bd4b8e7db96f7ad7167cf8f2
 
 # -------------------------
 # Corresponding SQL Queries Mapping for reports
@@ -387,64 +231,35 @@ SQL_QUERIES = {
         ORDER BY ap.date, ap.name;
     """,
     'disbursement_journal': """
-        WITH cash_moves AS (
-            -- The actual cash/bank outflow lines
-            SELECT
-                aml.move_id,
-                aml.credit AS disbursed_amount,
-                aml.partner_id
-            FROM account_move_line aml
-            JOIN account_account aa ON aa.id = aml.account_id
-            JOIN account_move am ON am.id = aml.move_id
-            JOIN account_journal aj ON aj.id = am.journal_id
-            WHERE aa.account_type = 'asset_cash'
-              AND aml.credit > 0
-              AND aj.type IN ('bank', 'cash')
-              AND am.state = 'posted'
-              AND am.date BETWEEN %s AND %s
-        ),
-        pay_bill AS (
-            -- Disbursements that clear a vendor bill (or expense sheet) via full reconciliation
+        WITH pay_bill AS (
             SELECT DISTINCT
-                cm.move_id AS payment_move_id,
+                ap.id AS payment_id,
                 bill_am.id AS bill_id
-            FROM cash_moves cm
+            FROM account_payment ap
             JOIN account_move_line pay_aml
-                ON pay_aml.move_id = cm.move_id
+                ON pay_aml.move_id = ap.move_id
                 AND pay_aml.full_reconcile_id IS NOT NULL
-            JOIN account_account pay_aa
-                ON pay_aa.id = pay_aml.account_id
-                AND pay_aa.account_type = 'liability_payable'
             JOIN account_move_line bill_aml
                 ON bill_aml.full_reconcile_id = pay_aml.full_reconcile_id
                 AND bill_aml.id != pay_aml.id
             JOIN account_move bill_am ON bill_am.id = bill_aml.move_id
-            WHERE bill_am.id != cm.move_id
-              AND (bill_am.move_type = 'in_invoice' OR bill_am.expense_sheet_id IS NOT NULL)
-        ),
-        ap_debit_moves AS (
-            -- Bank moves that debit Accounts Payable (used to flag unapplied payments)
-            SELECT DISTINCT aml.move_id
-            FROM account_move_line aml
-            JOIN account_account aa ON aa.id = aml.account_id
-            WHERE aa.account_type = 'liability_payable'
-              AND aml.debit > 0
+            WHERE bill_am.move_type = 'in_invoice'
+                AND bill_am.id != ap.move_id
         ),
         expense_line AS (
             SELECT DISTINCT ON (aml.move_id)
                 aml.move_id,
-                aa.name->>'en_US' AS account_title
+                aa.name->>'en_US' AS account_title,
+                aml.price_subtotal
             FROM account_move_line aml
             JOIN account_account aa ON aa.id = aml.account_id
             WHERE aml.tax_line_id IS NULL AND aml.product_id IS NOT NULL
             ORDER BY aml.move_id, aml.id
         ),
         payment_expense_line AS (
-            -- Direct disbursements: expense line on the same move as the cash credit
             SELECT DISTINCT ON (aml.move_id)
                 aml.move_id AS payment_move_id,
                 aa.name->>'en_US' AS account_title,
-                aml.name AS line_label,
                 ABS(aml.debit - aml.credit) AS amount
             FROM account_move_line aml
             JOIN account_account aa ON aa.id = aml.account_id
@@ -459,22 +274,9 @@ SQL_QUERIES = {
             WHERE aml.tax_line_id IS NOT NULL
             GROUP BY aml.move_id
         ),
-        bill_amounts AS (
-            -- Company-currency (PHP) untaxed amount and input VAT per bill, before EWT
-            SELECT
-                bm.id AS move_id,
-                ABS(bm.amount_untaxed_signed) AS untaxed,
-                COALESCE(SUM(ABS(tl.balance)) FILTER (WHERE tx.amount > 0), 0) AS input_tax
-            FROM account_move bm
-            LEFT JOIN account_move_line tl
-                ON tl.move_id = bm.id AND tl.tax_line_id IS NOT NULL
-            LEFT JOIN account_tax tx ON tx.id = tl.tax_line_id
-            WHERE bm.move_type = 'in_invoice'
-            GROUP BY bm.id, bm.amount_untaxed_signed
-        ),
         line_values AS (
             SELECT
-                l.id, l.move_id, ABS(l.balance) AS line_amount,
+                l.id, l.move_id, l.price_subtotal,
                 BOOL_OR(tag.name->>'en_US' ILIKE '%%46E%%') AS is_exempt,
                 BOOL_OR(tag.name->>'en_US' ILIKE '%%46ZR%%') AS is_zero_rated,
                 BOOL_OR(tag.name->>'en_US' ILIKE '%%42A%%') AS is_taxable
@@ -482,14 +284,14 @@ SQL_QUERIES = {
             LEFT JOIN account_account_tag_account_move_line_rel tagrel ON tagrel.account_move_line_id = l.id
             LEFT JOIN account_account_tag tag ON tag.id = tagrel.account_account_tag_id
             WHERE l.product_id IS NOT NULL
-            GROUP BY l.id, l.move_id, l.balance
+            GROUP BY l.id, l.move_id, l.price_subtotal
         ),
         line_totals AS (
             SELECT
                 move_id,
-                SUM(CASE WHEN is_exempt THEN line_amount ELSE 0 END) AS exempt_amount,
-                SUM(CASE WHEN is_zero_rated THEN line_amount ELSE 0 END) AS zero_rated_amount,
-                SUM(CASE WHEN is_taxable THEN line_amount ELSE 0 END) AS vatable_amount
+                SUM(CASE WHEN is_exempt THEN price_subtotal ELSE 0 END) AS exempt_amount,
+                SUM(CASE WHEN is_zero_rated THEN price_subtotal ELSE 0 END) AS zero_rated_amount,
+                SUM(CASE WHEN is_taxable THEN price_subtotal ELSE 0 END) AS vatable_amount
             FROM line_values
             GROUP BY move_id
         ),
@@ -504,57 +306,48 @@ SQL_QUERIES = {
             GROUP BY aml.move_id
         )
         SELECT
-            am.create_date AS "RELEASED DATE",
-            COALESCE(bill_am.create_date, am.date) AS "DATE",
-            COALESCE(bill_am.name, am.name) AS "NUMBER",
-            CASE
-                WHEN hes.id IS NOT NULL THEN 'EXPENSE REIMBURSEMENT'
-                WHEN bill_am.id IS NOT NULL THEN 'BILL PAYMENT'
-                WHEN adm.move_id IS NOT NULL THEN 'UNAPPLIED PAYMENT'
-                ELSE 'DIRECT DISBURSEMENT'
-            END AS "TYPE",
-            CASE WHEN bill_am.id IS NOT NULL THEN am.name ELSE '' END AS "SECONDARY NUMBER",
+            ap.create_date AS "RELEASED DATE",
+            COALESCE(bill_am.create_date, ap.date) AS "DATE",
+            ap.name AS "NUMBER",
+            '' AS "TYPE",
+            '' AS "SECONDARY NUMBER",
             rp.name AS "PAYEE/SUPPLIER",
             CASE
-                WHEN hes.id IS NOT NULL THEN CONCAT('To record reimbursement for ', COALESCE(hes.name, el.account_title, ''))
                 WHEN bill_am.id IS NOT NULL THEN CONCAT('To record payment for ', COALESCE(el.account_title, ''))
-                ELSE CONCAT('To record disbursement for ', COALESCE(pel.account_title, ''))
+                ELSE CONCAT('To record payment for ', COALESCE(pel.account_title, ap.memo, ''))
             END AS "PARTICULARS",
             CASE
-                WHEN hes.id IS NOT NULL THEN CONCAT('EXP# ', COALESCE(hes.name, bill_am.name))
                 WHEN bill_am.id IS NOT NULL THEN CONCAT('SAI# ', COALESCE(bill_am.ref, bill_am.name))
-                ELSE COALESCE(NULLIF(am.ref, ''), pel.line_label, '')
+                ELSE COALESCE(ap.memo, ap.payment_reference, '')
             END AS "PRIMARY",
             '' AS "SUPPLEMENTARY",
             '' AS "OTHER REFERENCES",
-            cm.disbursed_amount AS "AMOUNT",
+            ap.amount AS "AMOUNT",
             COALESCE(lt.zero_rated_amount, 0) AS "ZERO-RATED",
             COALESCE(lt.exempt_amount, 0) AS "EXEMPT/NON-VAT",
-            COALESCE(lt.vatable_amount, ba.untaxed, pel.amount) AS "VATABLE",
-            COALESCE(ba.input_tax, pt.tax_amount, 0) AS "INPUT TAX 12%%",
-            COALESCE(ba.untaxed + ba.input_tax, cm.disbursed_amount) AS "GROSS AMOUNT",
-            CASE WHEN COALESCE(ba.input_tax, pt.tax_amount, 0) > 0 THEN 'Y' ELSE 'N' END AS "INPUT TAX ALLOWED?",
-            COALESCE(lt.vatable_amount, ba.untaxed, pel.amount) AS "TAX BASE",
+            COALESCE(lt.vatable_amount, bill_am.amount_untaxed, pel.amount) AS "VATABLE",
+            COALESCE(bill_am.amount_tax, pt.tax_amount, 0) AS "INPUT TAX 12%%",
+            COALESCE(bill_am.amount_total, ap.amount) AS "GROSS AMOUNT",
+            CASE WHEN COALESCE(lt.vatable_amount, pt.tax_amount, 0) > 0 THEN 'Y' ELSE 'N' END AS "INPUT TAX ALLOWED?",
+            COALESCE(lt.vatable_amount, bill_am.amount_untaxed, pel.amount) AS "TAX BASE",
             COALESCE(ewt.ewt_rate, 0) AS "RATE",
             COALESCE(ewt.ewt_amount, 0) AS "EWT AMOUNT",
             'N' AS "EWT ABSORBED BY COMPANY?",
-            (COALESCE(ba.untaxed + ba.input_tax, cm.disbursed_amount)
-                - COALESCE(ewt.ewt_amount, 0)) AS "CV AMOUNT (CREDIT)",
+            (COALESCE(bill_am.amount_total, ap.amount) - COALESCE(ewt.ewt_amount, 0)) AS "CV AMOUNT (CREDIT)",
             COALESCE(el.account_title, pel.account_title, '') AS "ACCOUNT TITLE"
-        FROM cash_moves cm
-        JOIN account_move am ON am.id = cm.move_id
-        LEFT JOIN pay_bill pb ON pb.payment_move_id = cm.move_id
+        FROM account_payment ap
+        LEFT JOIN pay_bill pb ON pb.payment_id = ap.id
         LEFT JOIN account_move bill_am ON bill_am.id = pb.bill_id
-        LEFT JOIN hr_expense_sheet hes ON hes.id = bill_am.expense_sheet_id
-        LEFT JOIN ap_debit_moves adm ON adm.move_id = cm.move_id
-        LEFT JOIN res_partner rp ON rp.id = COALESCE(bill_am.partner_id, cm.partner_id)
+        JOIN res_partner rp ON rp.id = ap.partner_id
         LEFT JOIN expense_line el ON el.move_id = bill_am.id
-        LEFT JOIN payment_expense_line pel ON pel.payment_move_id = cm.move_id
-        LEFT JOIN payment_tax_line pt ON pt.payment_move_id = cm.move_id
-        LEFT JOIN bill_amounts ba ON ba.move_id = bill_am.id
+        LEFT JOIN payment_expense_line pel ON pel.payment_move_id = ap.move_id
+        LEFT JOIN payment_tax_line pt ON pt.payment_move_id = ap.move_id
         LEFT JOIN line_totals lt ON lt.move_id = bill_am.id
         LEFT JOIN ewt ON ewt.move_id = bill_am.id
-        ORDER BY am.date, am.name;
+        WHERE ap.payment_type = 'outbound'
+            AND ap.state = 'paid'
+            AND ap.date BETWEEN %s AND %s
+        ORDER BY ap.date, ap.name;
     """,
     'ap_history': """ 
         SELECT
@@ -801,12 +594,230 @@ SQL_QUERIES = {
         ORDER BY aa.name
 
         """,
-    'disbursement_summary': _DISB_SUMMARY_SQL.format(
-        extra_col='', order_by='am.date DESC, am.name DESC'),
-    'disbursement_summary_by_date': _DISB_SUMMARY_SQL.format(
-        extra_col="'N' AS \"ABSORBED EWT?\",", order_by='am.date ASC, am.name ASC'),
-    'disbursement_summary_by_series': _DISB_SUMMARY_SQL.format(
-        extra_col="'N' AS \"ABSORBED EWT?\",", order_by='am.name ASC'),
+    'disbursement_summary': """
+        WITH pay_bill AS (
+            SELECT DISTINCT
+                ap.id AS payment_id,
+                bill_am.id AS bill_id
+            FROM account_payment ap
+            JOIN account_move_line pay_aml
+                ON pay_aml.move_id = ap.move_id
+                AND pay_aml.full_reconcile_id IS NOT NULL
+            JOIN account_move_line bill_aml
+                ON bill_aml.full_reconcile_id = pay_aml.full_reconcile_id
+                AND bill_aml.id != pay_aml.id
+            JOIN account_move bill_am ON bill_am.id = bill_aml.move_id
+            WHERE bill_am.move_type = 'in_invoice'
+                AND bill_am.id != ap.move_id
+        ),
+        expense_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id,
+                aa.name->>'en_US' AS account_title
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL AND aml.product_id IS NOT NULL
+            ORDER BY aml.move_id, aml.id
+        ),
+        payment_other_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id AS payment_move_id,
+                aa.name->>'en_US' AS account_title,
+                ABS(aml.debit - aml.credit) AS amount
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL
+                AND aa.account_type NOT IN ('asset_cash', 'asset_bank')
+            ORDER BY aml.move_id, aml.id
+        ),
+        ewt AS (
+            SELECT
+                aml.move_id,
+                SUM(ABS(aml.credit - aml.debit)) AS ewt_amount
+            FROM account_move_line aml
+            JOIN account_tax at ON at.id = aml.tax_line_id
+            WHERE at.type_tax_use = 'purchase' AND at.amount < 0
+            GROUP BY aml.move_id
+        )
+        SELECT
+            ap.date AS "CV ENTRY DATE",
+            ap.date AS "CV RELEASE DATE",
+            ap.name AS "CV NUMBER",
+            bill_am.invoice_date AS "AP DATE",
+            bill_am.name AS "AP ENTRY NUMBER",
+            rc.id AS "BRANCH CODE",
+            rc.name AS "BRANCH NAME",
+            rp.name AS "NAME OF PAYEE/SUPPLIER",
+            COALESCE(bill_am.invoice_origin, ap.memo, '') AS "PARTICULARS",
+            COALESCE(el.account_title, pol.account_title, '') AS "ACCOUNT TITLE",
+            COALESCE(bill_am.amount_total, pol.amount, ap.amount) AS "GROSS AMOUNT",
+            COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0) AS "EWT AMOUNT",
+            (COALESCE(bill_am.amount_total, pol.amount, ap.amount)
+                - COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0)) AS "CV AMOUNT",
+            COALESCE(bill_am.payment_state, ap.state) AS "STATUS"
+        FROM account_payment ap
+        LEFT JOIN pay_bill pb ON pb.payment_id = ap.id
+        LEFT JOIN account_move bill_am ON bill_am.id = pb.bill_id
+        LEFT JOIN res_partner rp ON rp.id = ap.partner_id
+        LEFT JOIN res_company rc ON ap.company_id = rc.id
+        LEFT JOIN expense_line el ON el.move_id = bill_am.id
+        LEFT JOIN payment_other_line pol ON pol.payment_move_id = ap.move_id
+        LEFT JOIN ewt ewt_bill ON ewt_bill.move_id = bill_am.id
+        LEFT JOIN ewt ewt_pay ON ewt_pay.move_id = ap.move_id
+        WHERE ap.payment_type = 'outbound'
+            AND ap.state = 'paid'
+        ORDER BY ap.date DESC;
+    """,
+    'disbursement_summary_by_date': """
+        WITH pay_bill AS (
+            SELECT DISTINCT
+                ap.id AS payment_id,
+                bill_am.id AS bill_id
+            FROM account_payment ap
+            JOIN account_move_line pay_aml
+                ON pay_aml.move_id = ap.move_id
+                AND pay_aml.full_reconcile_id IS NOT NULL
+            JOIN account_move_line bill_aml
+                ON bill_aml.full_reconcile_id = pay_aml.full_reconcile_id
+                AND bill_aml.id != pay_aml.id
+            JOIN account_move bill_am ON bill_am.id = bill_aml.move_id
+            WHERE bill_am.move_type = 'in_invoice'
+                AND bill_am.id != ap.move_id
+        ),
+        expense_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id,
+                aa.name->>'en_US' AS account_title
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL AND aml.product_id IS NOT NULL
+            ORDER BY aml.move_id, aml.id
+        ),
+        payment_other_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id AS payment_move_id,
+                aa.name->>'en_US' AS account_title,
+                ABS(aml.debit - aml.credit) AS amount
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL
+                AND aa.account_type NOT IN ('asset_cash', 'asset_bank')
+            ORDER BY aml.move_id, aml.id
+        ),
+        ewt AS (
+            SELECT
+                aml.move_id,
+                SUM(ABS(aml.credit - aml.debit)) AS ewt_amount
+            FROM account_move_line aml
+            JOIN account_tax at ON at.id = aml.tax_line_id
+            WHERE at.type_tax_use = 'purchase' AND at.amount < 0
+            GROUP BY aml.move_id
+        )
+        SELECT
+            ap.date AS "CV ENTRY DATE",
+            ap.date AS "CV RELEASE DATE",
+            ap.name AS "CV NUMBER",
+            bill_am.invoice_date AS "AP DATE",
+            bill_am.name AS "AP ENTRY NUMBER",
+            rc.id AS "BRANCH CODE",
+            rc.name AS "BRANCH NAME",
+            rp.name AS "NAME OF PAYEE/SUPPLIER",
+            COALESCE(bill_am.invoice_origin, ap.memo, '') AS "PARTICULARS",
+            COALESCE(el.account_title, pol.account_title, '') AS "ACCOUNT TITLE",
+            COALESCE(bill_am.amount_total, pol.amount, ap.amount) AS "GROSS AMOUNT",
+            COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0) AS "EWT AMOUNT",
+            'N' AS "ABSORBED EWT?",
+            (COALESCE(bill_am.amount_total, pol.amount, ap.amount)
+                - COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0)) AS "CV AMOUNT",
+            COALESCE(bill_am.payment_state, ap.state) AS "STATUS"
+        FROM account_payment ap
+        LEFT JOIN pay_bill pb ON pb.payment_id = ap.id
+        LEFT JOIN account_move bill_am ON bill_am.id = pb.bill_id
+        LEFT JOIN res_partner rp ON rp.id = ap.partner_id
+        LEFT JOIN res_company rc ON ap.company_id = rc.id
+        LEFT JOIN expense_line el ON el.move_id = bill_am.id
+        LEFT JOIN payment_other_line pol ON pol.payment_move_id = ap.move_id
+        LEFT JOIN ewt ewt_bill ON ewt_bill.move_id = bill_am.id
+        LEFT JOIN ewt ewt_pay ON ewt_pay.move_id = ap.move_id
+        WHERE ap.payment_type = 'outbound'
+            AND ap.state = 'paid'
+        ORDER BY ap.date ASC;
+    """,
+    'disbursement_summary_by_series': """
+        WITH pay_bill AS (
+            SELECT DISTINCT
+                ap.id AS payment_id,
+                bill_am.id AS bill_id
+            FROM account_payment ap
+            JOIN account_move_line pay_aml
+                ON pay_aml.move_id = ap.move_id
+                AND pay_aml.full_reconcile_id IS NOT NULL
+            JOIN account_move_line bill_aml
+                ON bill_aml.full_reconcile_id = pay_aml.full_reconcile_id
+                AND bill_aml.id != pay_aml.id
+            JOIN account_move bill_am ON bill_am.id = bill_aml.move_id
+            WHERE bill_am.move_type = 'in_invoice'
+                AND bill_am.id != ap.move_id
+        ),
+        expense_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id,
+                aa.name->>'en_US' AS account_title
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL AND aml.product_id IS NOT NULL
+            ORDER BY aml.move_id, aml.id
+        ),
+        payment_other_line AS (
+            SELECT DISTINCT ON (aml.move_id)
+                aml.move_id AS payment_move_id,
+                aa.name->>'en_US' AS account_title,
+                ABS(aml.debit - aml.credit) AS amount
+            FROM account_move_line aml
+            JOIN account_account aa ON aa.id = aml.account_id
+            WHERE aml.tax_line_id IS NULL
+                AND aa.account_type NOT IN ('asset_cash', 'asset_bank')
+            ORDER BY aml.move_id, aml.id
+        ),
+        ewt AS (
+            SELECT
+                aml.move_id,
+                SUM(ABS(aml.credit - aml.debit)) AS ewt_amount
+            FROM account_move_line aml
+            JOIN account_tax at ON at.id = aml.tax_line_id
+            WHERE at.type_tax_use = 'purchase' AND at.amount < 0
+            GROUP BY aml.move_id
+        )
+        SELECT
+            ap.name AS "CV NUMBER",
+            ap.date AS "CV ENTRY DATE",
+            ap.date AS "CV RELEASE DATE",
+            bill_am.invoice_date AS "AP DATE",
+            bill_am.name AS "AP ENTRY NUMBER",
+            rc.id AS "BRANCH CODE",
+            rc.name AS "BRANCH NAME",
+            rp.name AS "NAME OF PAYEE/SUPPLIER",
+            COALESCE(bill_am.invoice_origin, ap.memo, '') AS "PARTICULARS",
+            COALESCE(el.account_title, pol.account_title, '') AS "ACCOUNT TITLE",
+            COALESCE(bill_am.amount_total, pol.amount, ap.amount) AS "GROSS AMOUNT",
+            COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0) AS "EWT AMOUNT",
+            'N' AS "ABSORBED EWT?",
+            (COALESCE(bill_am.amount_total, pol.amount, ap.amount)
+                - COALESCE(ewt_bill.ewt_amount, ewt_pay.ewt_amount, 0)) AS "CV AMOUNT",
+            COALESCE(bill_am.payment_state, ap.state) AS "STATUS"
+        FROM account_payment ap
+        LEFT JOIN pay_bill pb ON pb.payment_id = ap.id
+        LEFT JOIN account_move bill_am ON bill_am.id = pb.bill_id
+        LEFT JOIN res_partner rp ON rp.id = ap.partner_id
+        LEFT JOIN res_company rc ON ap.company_id = rc.id
+        LEFT JOIN expense_line el ON el.move_id = bill_am.id
+        LEFT JOIN payment_other_line pol ON pol.payment_move_id = ap.move_id
+        LEFT JOIN ewt ewt_bill ON ewt_bill.move_id = bill_am.id
+        LEFT JOIN ewt ewt_pay ON ewt_pay.move_id = ap.move_id
+        WHERE ap.payment_type = 'outbound'
+            AND ap.state = 'paid'
+        ORDER BY ap.name ASC;
+    """,
         'check_collection_summary': """
         SELECT
             rp.name AS "NAME OF CUSTOMER",
@@ -867,26 +878,23 @@ SQL_QUERIES = {
         ORDER BY ap.date, rp.name;
         """,
     'general_journal': """
-            WITH {doc_ctes}
             SELECT
                 am.date AS "DATE",
                 am.name AS "JOURNAL BATCH ID",
-                COALESCE(NULLIF(aml.name, ''), am.ref, '') AS "DESCRIPTION",
-                (aa.code_store ->> am.company_id::text) AS "ACCOUNT CODE",
+                aml.name AS "DESCRIPTION",
+                (aa.code_store ->> '1') AS "ACCOUNT CODE",
                 (aa.name ->> 'en_US') AS "ACCOUNT TITLE",
-                {doc_expr} AS "REF NUMBER",
+                COALESCE(aml.ref, am.ref) AS "REF NUMBER",
                 aml.debit AS "DEBIT",
                 aml.credit AS "CREDIT"
             FROM account_move_line aml
-            JOIN account_move am ON am.id = aml.move_id
-            JOIN account_journal aj ON aj.id = am.journal_id
-            JOIN account_account aa ON aa.id = aml.account_id
-            LEFT JOIN cash_dir cd ON cd.move_id = am.id
-            LEFT JOIN pay_bill_docs pb ON pb.payment_move_id = am.id
+            JOIN account_move am
+                ON am.id = aml.move_id
+            JOIN account_account aa
+                ON aa.id = aml.account_id
             WHERE am.state = 'posted'
-              AND am.date BETWEEN %s AND %s
             ORDER BY am.date, am.name, aml.id;
-        """.format(doc_ctes=_DOC_REF_CTES, doc_expr=_DOC_REF_EXPR),
+        """,
         'inventory_book': """
         SELECT
             sm.date::date AS "DATE",
@@ -1129,77 +1137,31 @@ SQL_QUERIES = {
             ORDER BY rp.name;
         """,
     'general_ledger': """
-            WITH params AS (
-                SELECT %s::date AS date_from, %s::date AS date_to
-            ),
-            {doc_ctes},
-            period_lines AS (
-                SELECT
-                    aml.id AS line_id, aml.account_id, aml.company_id,
-                    am.date AS d, am.name AS jref, (aj.name ->> 'en_US') AS jtype,
-                    {doc_expr} AS primary_ref,
-                    COALESCE(NULLIF(am.ref, ''), '') AS secondary_ref,
-                    COALESCE(aml.name, '') AS particulars,
-                    aml.debit, aml.credit
-                FROM account_move_line aml
-                JOIN account_move am ON am.id = aml.move_id
-                JOIN account_journal aj ON aj.id = am.journal_id
-                LEFT JOIN cash_dir cd ON cd.move_id = am.id
-                LEFT JOIN pay_bill_docs pb ON pb.payment_move_id = am.id
-                CROSS JOIN params p
-                WHERE am.state = 'posted'
-                  AND am.date BETWEEN p.date_from AND p.date_to
-            ),
-            opening AS (
-                SELECT aml.account_id, aml.company_id, SUM(aml.debit - aml.credit) AS bal
-                FROM account_move_line aml
-                JOIN account_move am ON am.id = aml.move_id
-                CROSS JOIN params p
-                WHERE am.state = 'posted' AND am.date < p.date_from
-                GROUP BY aml.account_id, aml.company_id
-            ),
-            accts AS (
-                SELECT account_id, company_id FROM period_lines
-                UNION
-                SELECT account_id, company_id FROM opening WHERE bal <> 0
-            ),
-            opening_rows AS (
-                SELECT a.account_id, a.company_id, COALESCE(o.bal, 0) AS bal
-                FROM accts a
-                LEFT JOIN opening o
-                    ON o.account_id = a.account_id AND o.company_id = a.company_id
-            )
             SELECT
-                x.acct AS "ACCOUNT",
-                x.d AS "DATE",
-                x.jref AS "JOURNAL REF. NO.",
-                x.jtype AS "JOURNAL TYPE",
-                x.primary_ref AS "PRIMARY",
-                x.secondary_ref AS "SECONDARY",
-                x.particulars AS "PARTICULARS",
-                x.debit AS "DEBIT",
-                x.credit AS "CREDIT"
-            FROM (
-                SELECT
-                    (aa.code_store ->> orow.company_id::text) || ' - ' || (aa.name ->> 'en_US') AS acct,
-                    0 AS grp, (p.date_from - 1) AS d, ''::text AS jref,
-                    'Beginning Balance'::text AS jtype, ''::text AS primary_ref,
-                    ''::text AS secondary_ref, 'Beginning Balance'::text AS particulars,
-                    GREATEST(orow.bal, 0) AS debit, GREATEST(-orow.bal, 0) AS credit,
-                    0 AS line_id
-                FROM opening_rows orow
-                JOIN account_account aa ON aa.id = orow.account_id
-                CROSS JOIN params p
-                UNION ALL
-                SELECT
-                    (aa.code_store ->> pl.company_id::text) || ' - ' || (aa.name ->> 'en_US'),
-                    1, pl.d, pl.jref, pl.jtype, pl.primary_ref, pl.secondary_ref,
-                    pl.particulars, pl.debit, pl.credit, pl.line_id
-                FROM period_lines pl
-                JOIN account_account aa ON aa.id = pl.account_id
-            ) x
-            ORDER BY x.acct, x.grp, x.d, x.jref, x.line_id;
-        """.format(doc_ctes=_DOC_REF_CTES, doc_expr=_DOC_REF_EXPR),
+                am.date AS "DATE",
+                am.name AS "REFERENCE",
+                am.ref AS "PRIMARY REF",
+                (aj.name ->> 'en_US') AS "JOURNAL TYPE",
+                aml.name AS "DESCRIPTION",
+                (aa.code_store ->> '1') || ' - ' || (aa.name ->> 'en_US') AS "ACCOUNT TITLE",
+                aml.debit AS "DEBIT",
+                aml.credit AS "CREDIT",
+                SUM(aml.debit - aml.credit)
+                    OVER (
+                        PARTITION BY aml.account_id
+                        ORDER BY am.date ASC, aml.id ASC
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS "BALANCE"
+            FROM account_move_line aml
+            JOIN account_move am
+                ON am.id = aml.move_id
+            JOIN account_account aa
+                ON aa.id = aml.account_id
+            JOIN account_journal aj
+                ON aj.id = am.journal_id
+            WHERE am.state = 'posted'
+            ORDER BY aa.id, am.date, aml.id;
+        """,
     'sawt': """
         WITH params AS (
             SELECT %s::date AS date_from, %s::date AS date_to
