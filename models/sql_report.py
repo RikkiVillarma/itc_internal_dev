@@ -78,6 +78,16 @@ REPORT_CATEGORIES = [
     ('none', 'None'),
 ]
 
+# Tax returns a SAWT can be attached to; the code goes into every SAWT DAT record
+SAWT_FORM_TYPES = [
+    ('1702Q', '1702Q'),
+    ('1701Q', '1701Q'),
+    ('2550Q', '2550Q'),
+    ('2551Q', '2551Q'),
+    ('1702', '1702 (Annual)'),
+    ('1701', '1701 (Annual)'),
+]
+
 # -------------------------
 # Corresponding SQL Queries Mapping for reports
 # -------------------------
@@ -1095,6 +1105,10 @@ SQL_QUERIES = {
                 rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
                 CASE WHEN rp.is_company THEN rp.name ELSE '' END AS "CORPORATION",
                 CASE WHEN NOT rp.is_company THEN rp.name ELSE '' END AS "INDIVIDUAL",
+                rp.is_company AS "IS COMPANY",
+                rp.last_name AS "LAST NAME",
+                rp.first_name AS "FIRST NAME",
+                rp.middle_name AS "MIDDLE NAME",
                 UPPER(
                     REGEXP_REPLACE(
                         COALESCE(
@@ -1118,7 +1132,8 @@ SQL_QUERIES = {
             AND at.type_tax_use = 'purchase'
             AND at.amount < 0
             AND am.invoice_date BETWEEN p.date_from AND p.date_to
-            GROUP BY rp.name, rp.vat, rp.is_company, at.name, at.description, at.amount
+            GROUP BY rp.name, rp.vat, rp.is_company, rp.last_name, rp.first_name, rp.middle_name,
+                     at.name, at.description, at.amount
             ORDER BY rp.name;
         """,
     'general_ledger': """
@@ -1155,6 +1170,10 @@ SQL_QUERIES = {
             ROW_NUMBER() OVER (ORDER BY rp.name) AS "SEQ NO",
             rp.vat AS "TAXPAYER IDENTIFICATION NUMBER",
             rp.name AS "REGISTERED NAME",
+            rp.is_company AS "IS COMPANY",
+            rp.last_name AS "LAST NAME",
+            rp.first_name AS "FIRST NAME",
+            rp.middle_name AS "MIDDLE NAME",
             p.date_from AS "RETURN PERIOD FROM",
             p.date_to AS "RETURN PERIOD TO",
             UPPER(
@@ -1180,7 +1199,8 @@ SQL_QUERIES = {
         AND at.type_tax_use = 'sale'
         AND at.amount < 0
         AND am.invoice_date BETWEEN p.date_from AND p.date_to
-        GROUP BY rp.name, rp.vat, at.name, at.description, at.amount, p.date_from, p.date_to
+        GROUP BY rp.name, rp.vat, rp.is_company, rp.last_name, rp.first_name, rp.middle_name,
+                 at.name, at.description, at.amount, p.date_from, p.date_to
         ORDER BY rp.name;
     """,
     'qap_summary': """
@@ -1494,6 +1514,12 @@ SQL_QUERIES = {
 }
 SQL_QUERIES['form_1601eq'] = SQL_QUERIES['qap_summary']
 
+# Reports that support the .DAT export
+DAT_SUPPORTED_REPORTS = (
+    'qap_summary', 'form_1604e', 'vat_summary_sales', 'vat_summary_purchase',
+    'form_1601e', 'form_1601eq', 'map_summary', 'sawt',
+)
+
 class ResCompany(models.Model):
     _inherit = 'res.company'
     rdo_code = fields.Char("RDO Code")
@@ -1530,6 +1556,14 @@ class SqlReport(models.Model):
         default=str(date.today().year),
         help="Select a year to auto-fill From Date and To Date"
     )
+
+    sawt_form_type = fields.Selection(
+        SAWT_FORM_TYPES,
+        string="SAWT Attached To",
+        default='1702Q',
+        help="Tax return this SAWT will be attached to; used as the form code in the DAT file.",
+    )
+
     _sql_constraints = [
         ('unique_report_name', 'unique(name)', 'Each report name must be unique!')
     ]
@@ -1634,7 +1668,11 @@ class SqlReport(models.Model):
             for row in rows:
                 row_dict, cells = {}, []
                 for col, val in zip(columns, row):
-                    if isinstance(val, (datetime, date)):
+                    if isinstance(val, bool):
+                        # bool is a subclass of int — must be checked first,
+                        # otherwise True/False get formatted as "1"/"0" and summed in totals
+                        val = 'Y' if val else 'N'
+                    elif isinstance(val, (datetime, date)):
                         val = val.isoformat()
                     elif isinstance(val, (int, float)):
                         numeric_totals[col] = numeric_totals.get(col, 0) + (val or 0)
@@ -1894,6 +1932,23 @@ class SqlReport(models.Model):
             'target': 'self',
         }
 
+    # -------------------------
+    # DAT export helpers
+    # -------------------------
+    @staticmethod
+    def _dat_to_float(val):
+        if val in (None, '', '-'):
+            return 0.0
+        try:
+            return float(str(val).replace(',', ''))
+        except ValueError:
+            return 0.0
+
+    @staticmethod
+    def _dat_is_company(val):
+        if isinstance(val, bool):
+            return val
+        return str(val or '').strip().lower() in ('1', 'true', 't', 'y', 'yes')
 
     def _build_alphalist_dat_lines(self, rows, dat_prefix, form_code, period):
         """Builds BIR alphalist DAT lines (H / D1 / C1 records) shared by the
@@ -1919,7 +1974,7 @@ class SqlReport(models.Model):
         total_income = 0.0
         total_tax = 0.0
         for idx, row in enumerate(rows, start=1):
-            is_company = row.get("IS COMPANY")
+            is_company = self._dat_is_company(row.get("IS COMPANY"))
             if is_company:
                 name = row.get("CORPORATION") or ''
                 last, first, middle = '', '', ''
@@ -1941,8 +1996,9 @@ class SqlReport(models.Model):
                 rate_val = 0.0
             rate = f"{rate_val:g}"
 
-            income = _to_float(row.get("TOTAL INCOME PAYMENT"))
-            tax = _to_float(row.get("TOTAL TAX WITHHELD"))
+            # QAP/1601E use "TOTAL ..." columns; MAP Summary uses "AMOUNT OF ..." columns
+            income = _to_float(row.get("TOTAL INCOME PAYMENT") or row.get("AMOUNT OF INCOME PAYMENT"))
+            tax = _to_float(row.get("TOTAL TAX WITHHELD") or row.get("AMOUNT OF TAX WITHHELD"))
             total_income += income
             total_tax += tax
 
@@ -1957,14 +2013,64 @@ class SqlReport(models.Model):
         )
         return lines
 
+    def _build_sawt_dat_lines(self, rows, form_code, period):
+        """BIR SAWT DAT: HSAWT header / DSAWT per payor-per-ATC / CSAWT control."""
+
+        def _clean(text):
+            # quotes/newlines would break the comma-separated record
+            return str(text or '').replace('"', '').replace('\n', ' ').strip()
+
+        company = self.env.company
+        agent_tin = (company.vat or '').replace('-', '')
+        branch = '0000'
+
+        lines = [
+            f'HSAWT,H{form_code},{agent_tin},{branch},"{_clean(company.name)}","","","",'
+            f'{period},{company.rdo_code or ""}'
+        ]
+
+        total_income = 0.0
+        total_tax = 0.0
+        for idx, row in enumerate(rows, start=1):
+            if self._dat_is_company(row.get("IS COMPANY")):
+                name = _clean(row.get("REGISTERED NAME"))
+                last = first = middle = ''
+            else:
+                name = ''
+                last = _clean(row.get("LAST NAME"))
+                first = _clean(row.get("FIRST NAME"))
+                middle = _clean(row.get("MIDDLE NAME"))
+                if not (last or first):
+                    # partner has no split name filled in — fall back to the full name
+                    last = _clean(row.get("REGISTERED NAME"))
+
+            payor_tin = (row.get("TAXPAYER IDENTIFICATION NUMBER") or '').replace('-', '')
+            atc = row.get("ATC CODE") or ''
+            rate = self._dat_to_float((row.get("TAX RATE") or '0').replace('%', ''))
+            # sale-side CWT lines are debits, so credit - debit comes out negative
+            income = abs(self._dat_to_float(row.get("AMOUNT")))
+            tax = abs(self._dat_to_float(row.get("TAX WITHHELD")))
+            total_income += income
+            total_tax += tax
+
+            lines.append(
+                f'DSAWT,D{form_code},{idx},{payor_tin},{branch},"{name}","{last}","{first}","{middle}",'
+                f'{period},{atc},{rate:.2f},{income:.2f},{tax:.2f}'
+            )
+
+        lines.append(
+            f'CSAWT,C{form_code},{agent_tin},{branch},{period},{total_income:.2f},{total_tax:.2f}'
+        )
+        return lines
+
     def action_export_dat(self):
         self.ensure_one()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
-        if self.name not in ('qap_summary', 'form_1604e', 'vat_summary_sales', 'vat_summary_purchase', 'form_1601e', 'form_1601eq'):
+        if self.name not in DAT_SUPPORTED_REPORTS:
             raise UserError(
-                "DAT export is currently only supported for the QAP Summary, Form 1604E, "
-                "VAT Summary Sales, VAT Summary Purchase, Form 1601E, and Form 1601EQ reports."
+                "DAT export is currently only supported for the QAP Summary, MAP Summary List, SAWT, "
+                "Form 1604E, VAT Summary Sales, VAT Summary Purchase, Form 1601E, and Form 1601EQ reports."
             )
 
         def _to_float(val):
@@ -1987,6 +2093,16 @@ class SqlReport(models.Model):
         elif self.name == 'form_1601e':
             period = self.from_date.strftime('%m/%Y')
             lines = self._build_alphalist_dat_lines(rows, dat_prefix='HMAP', form_code='1601E', period=period)
+
+        elif self.name == 'map_summary':
+            period = self.to_date.strftime('%m/%Y')
+            lines = self._build_alphalist_dat_lines(rows, dat_prefix='HMAP', form_code='1601E', period=period)
+
+        elif self.name == 'sawt':
+            if not self.sawt_form_type:
+                raise UserError("Please select which tax return this SAWT is attached to.")
+            period = self.to_date.strftime('%m/%Y')
+            lines = self._build_sawt_dat_lines(rows, form_code=self.sawt_form_type, period=period)
 
         elif self.name == 'form_1604e':
             period = self.to_date.strftime('%m/%d/%Y')
@@ -2191,5 +2307,3 @@ class SqlReportLine(models.Model):
         html += "</tbody></table>"
 
         return html
-
-

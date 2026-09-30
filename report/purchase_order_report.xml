@@ -2,438 +2,292 @@
 <odoo>
   <template id="custom_report_purchase_order">
     <t t-call="web.html_container">
-      <t t-call="web.html_container">
         <t t-foreach="docs" t-as="doc">
+          <t t-set="po_prefix" t-value="'IPO' if doc.x_purchase_type == 'import' else 'LPO'"/>
+          <t t-set="fmt" t-value="lambda v: '{:,.2f}'.format(v) if v else '-'"/>
+
           <div class="header" style="font-family: Arial, sans-serif; padding-top: 70px; padding-bottom: 10px;">
               <div style="text-align:center; font-size:15px; line-height:1.3;">
-          
-                  <!-- Company Name -->
                   <div style="font-size:20px; font-weight:bold; margin-bottom:3px;">
                       <t t-esc="doc.company_id.name"/>
                   </div>
-          
-                  <!-- Company Address -->
                   <div style="max-width:600px; margin:0 auto; line-height:1.3;">
                       <t t-esc="(doc.company_id.partner_id.street or '').upper()"/>
-          
                       <t t-if="doc.company_id.partner_id.street2">
                           , <t t-esc="doc.company_id.partner_id.street2.upper()"/>
                       </t>
-          
                       <t t-if="doc.company_id.partner_id.city">
                           , <t t-esc="doc.company_id.partner_id.city.upper()"/>
                       </t>
-          
                       <t t-if="doc.company_id.partner_id.state_id">
                           , <t t-esc="doc.company_id.partner_id.state_id.name.upper()"/>
                       </t>
-          
                       <t t-if="doc.company_id.partner_id.zip">
                           <t t-esc="doc.company_id.partner_id.zip"/>
                       </t>
                   </div>
-          
-                  <!-- TIN -->
-                  <div>
-                      VAT REG TIN:
-                      <t t-esc="doc.company_id.vat or ''"/>
-                  </div>
-          
-                  <!-- Telephone -->
-                  <div>
-                      Telephone No.:
-                      <t t-esc="doc.company_id.phone or doc.company_id.partner_id.phone or ''"/>
-                  </div>
-          
+                  <div>VAT REG TIN: <t t-esc="doc.company_id.vat or ''"/></div>
+                  <div>Telephone No.: <t t-esc="doc.company_id.phone or doc.company_id.partner_id.phone or ''"/></div>
               </div>
           </div>
+
           <div class="article" t-att-data-oe-model="doc._name" t-att-data-oe-id="doc.id">
           <div class="page" style="font-family: Arial, sans-serif; font-size: 15px; line-height:1.3;">
             <main>
 
-              <!-- Document Header -->
-              <t t-if="doc.x_purchase_type == 'import'">
-                <div style="text-align:left; font-size:18px; font-weight:bold;">
-                  IMPORT PURCHASE ORDER
-                </div>
-              </t>
-              <t t-else="">
-                <div style="text-align:left; font-size:18px; font-weight:bold;">
-                  LOCAL PURCHASE ORDER
-                </div>
-              </t>
+              <!-- Document Title -->
+              <div style="text-align:left; font-size:18px; font-weight:bold;">
+                <t t-if="doc.x_purchase_type == 'import'">IMPORT PURCHASE ORDER</t>
+                <t t-else="">LOCAL PURCHASE ORDER</t>
+              </div>
 
               <!-- PO Info -->
               <div style="width:100%; font-size:13px; margin-bottom:10px; overflow:hidden;">
-              
-                  <!-- LEFT: LPO NO. AND BR -->
                   <div style="width:50%; float:left; padding:3px; box-sizing:border-box;">
-              
                       <div style="margin-bottom:2px;">
-                          <t t-if="doc.x_purchase_type == 'import'">
-                              <strong>IPO NO.:</strong>
-                          </t>
-                          <t t-else="">
-                              <strong>LPO NO.:</strong>
-                          </t>
+                          <strong><t t-esc="po_prefix"/> NO.:</strong>
                           <t t-esc="doc.name"/>
                       </div>
-              
-                      <div>
-                          <strong>BR:</strong> BR-00000-MAIN
-                      </div>
-              
+                      <div><strong>BR:</strong> BR-00000-MAIN</div>
                   </div>
-              
                   <div style="width:40%; float:right; box-sizing:border-box;">
-
                       <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px;">
-                  
-                          <!-- LPO DATE -->
                           <tr>
                               <td style="width:50%; border:1px solid black; padding:2px;">
-                                  <t t-if="doc.x_purchase_type == 'import'">
-                                      <strong>IPO Date:</strong>
-                                  </t>
-                                  <t t-else="">
-                                      <strong>LPO Date:</strong>
-                                  </t>
+                                  <strong><t t-esc="po_prefix"/> Date:</strong>
                               </td>
-                  
-                              <td style="width:50%; border:1px solid black; padding:2px; text-align: center;">
-                                  <t t-esc="doc.date_order"/>
+                              <td style="width:50%; border:1px solid black; padding:2px; text-align:center;">
+                                  <t t-esc="doc.date_order and context_timestamp(doc.date_order).strftime('%B %-d, %Y')"/>
                               </td>
                           </tr>
-                  
-                          <!-- TERM -->
                           <tr>
-                              <td style="border:1px solid black; padding:2px;">
-                                  <strong>Term:</strong>
-                              </td>
-                  
-                              <td style="border:1px solid black; padding:2px; text-align: center;">
+                              <td style="border:1px solid black; padding:2px;"><strong>Term:</strong></td>
+                              <td style="border:1px solid black; padding:2px; text-align:center;">
                                   <t t-esc="doc.payment_term_id.name or 'Not Applicable'"/>
                               </td>
                           </tr>
-                  
-                          <!-- EXPECTED DELIVERY DATE -->
                           <tr>
-                              <td style="border:1px solid black; padding:2px;">
-                                  <strong>Expected Delivery Date:</strong>
-                              </td>
-                  
+                              <td style="border:1px solid black; padding:2px;"><strong>Expected Delivery Date:</strong></td>
                               <td style="border:1px solid black; padding:2px; text-align:center;">
-                                  <t t-esc="doc.date_planned.strftime('%B %-d, %Y') if doc.date_planned else ''"/>
+                                  <t t-esc="doc.date_planned and context_timestamp(doc.date_planned).strftime('%B %-d, %Y')"/>
                               </td>
                           </tr>
-                          
                       </table>
-
                   </div>
-                <div style="clear:both;"/>
+                  <div style="clear:both;"/>
               </div>
 
-              
               <!-- Supplier Information -->
               <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:15px;">
-              
-                  <!-- Supplier -->
                   <tr>
-                      <td style="border:1px solid black; padding:5px; width:25%;">
-                          <strong>Supplier:</strong>
-                      </td>
-                      <td style="border:1px solid black; padding:5px;">
-                          <t t-esc="doc.partner_id.name"/>
-                      </td>
+                      <td style="border:1px solid black; padding:5px; width:25%;"><strong>Supplier:</strong></td>
+                      <td style="border:1px solid black; padding:5px;"><t t-esc="doc.partner_id.name"/></td>
                   </tr>
-              
-                  <!-- Address - 2 row height -->
                   <tr style="height:40px;">
-                      <td style="border:1px solid black; padding:5px; width:25%; vertical-align:top;">
-                          <strong>Address:</strong>
-                      </td>
-                      <td style="border:1px solid black; padding:5px; vertical-align:top;">
-                          <t t-esc="doc.partner_id.street or ''"/>
-                      </td>
+                      <td style="border:1px solid black; padding:5px; vertical-align:top;"><strong>Address:</strong></td>
+                      <td style="border:1px solid black; padding:5px; vertical-align:top;"><t t-esc="doc.partner_id.street or ''"/></td>
                   </tr>
-              
-                  <!-- TIN -->
                   <tr>
-                      <td style="border:1px solid black; padding:5px;">
-                          <strong>TIN:</strong>
-                      </td>
-                      <td style="border:1px solid black; padding:5px;">
-                          <t t-esc="doc.partner_id.vat or ''"/>
-                      </td>
+                      <td style="border:1px solid black; padding:5px;"><strong>TIN:</strong></td>
+                      <td style="border:1px solid black; padding:5px;"><t t-esc="doc.partner_id.vat or ''"/></td>
                   </tr>
-              
-                  <!-- Delivery/Shipped To - 2 row height -->
                   <tr style="height:40px;">
+                      <td style="border:1px solid black; padding:5px; vertical-align:top;"><strong>Delivery/Shipped To:</strong></td>
                       <td style="border:1px solid black; padding:5px; vertical-align:top;">
-                          <strong>Delivery/Shipped To:</strong>
-                      </td>
-                      <td style="border:1px solid black; padding:5px; vertical-align:top;">
-                          <t t-esc="doc.dest_address_id.name or doc.partner_id.name"/>
+                          <t t-esc="doc.dest_address_id.name or doc.picking_type_id.warehouse_id.partner_id.name or doc.company_id.name"/>
                       </td>
                   </tr>
-              
-                  <!-- Reference - 2 row height -->
                   <tr style="height:40px;">
-                      <td colspan="2"
-                          style="border:1px solid black; padding:5px; vertical-align:top;">
-                          <strong>Reference:</strong>
-                          <t t-esc="doc.partner_ref or ''"/>
+                      <td colspan="2" style="border:1px solid black; padding:5px; vertical-align:top;">
+                          <strong>Reference:</strong> <t t-esc="doc.partner_ref or ''"/>
                       </td>
                   </tr>
-              
               </table>
 
-
-              <!-- Order Lines -->
-              <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:2px;">
+              <!-- Order Lines (margin-bottom:0 so the breakdown attaches directly below) -->
+              <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:0;">
                   <thead>
                       <tr style="background:#f0f0f0;">
-                          <th style="border:1px solid black; padding:5px; text-align:center; font-weight:bold;">
-                              Description
-                          </th>
-                          <th style="border:1px solid black; padding:5px; text-align:center; width:60px; font-weight:bold;">
-                              Qty
-                          </th>
-                          <th style="border:1px solid black; padding:5px; text-align:center; width:60px; font-weight:bold;">
-                              Unit
-                          </th>
-                          <th style="border:1px solid black; padding:5px; text-align:center; width:90px; font-weight:bold;">
-                              Unit Price
-                          </th>
-                          <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
-                              Total
-                          </th>
-                          <th style="border:1px solid black; padding:5px; text-align:center; width:90px; font-weight:bold;">
-                              Discount
-                          </th>
-                          <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
-                              Net Amount
-                          </th>
+                          <th style="border:1px solid black; padding:5px; text-align:center;">Description</th>
+                          <th style="border:1px solid black; padding:5px; text-align:center; width:60px;">Qty</th>
+                          <th style="border:1px solid black; padding:5px; text-align:center; width:60px;">Unit</th>
+                          <th style="border:1px solid black; padding:5px; text-align:center; width:90px;">Unit Price</th>
+                          <th style="border:1px solid black; padding:5px; text-align:center; width:110px;">Total</th>
+                          <th style="border:1px solid black; padding:5px; text-align:center; width:90px;">Discount</th>
+                          <th style="border:1px solid black; padding:5px; text-align:center; width:110px;">Net Amount</th>
                       </tr>
                   </thead>
                   <tbody>
+                      <t t-set="cell" t-value="'border:none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;'"/>
                       <t t-foreach="range(max(9, len(doc.order_line)))" t-as="row_index">
-                          <tr style="border: none !important; border-top: none !important; border-bottom: none !important;">
+                          <tr style="border:none !important;">
                               <t t-if="row_index &lt; len(doc.order_line)">
-                                  <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;">
-                                      <t t-esc="doc.order_line[row_index].name"/>
-                                  </td>
-                                  <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:center;">
-                                      <t t-esc="'{:,.2f}'.format(doc.order_line[row_index].product_qty)"/>
-                                  </td>
-                                  <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:center;">
-                                      <t t-esc="doc.order_line[row_index].product_uom.name"/>
-                                  </td>
-                                  <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                                      <t t-esc="'{:,.2f}'.format(doc.order_line[row_index].price_unit)"/>
-                                  </td>
-                                  <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                                      <t t-esc="'{:,.2f}'.format(doc.order_line[row_index].price_unit * doc.order_line[row_index].product_qty)"/>
-                                  </td>
-                                  <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                                      0.00
-                                  </td>
-                                  <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                                      <t t-esc="'{:,.2f}'.format(doc.order_line[row_index].price_subtotal)"/>
-                                  </td>
+                                  <t t-set="line" t-value="doc.order_line[row_index]"/>
+                                  <td t-att-style="cell"><t t-esc="line.name"/></td>
+                                  <td t-att-style="cell + ' text-align:center;'"><t t-esc="'{:,.2f}'.format(line.product_qty)"/></td>
+                                  <td t-att-style="cell + ' text-align:center;'"><t t-esc="line.product_uom.name"/></td>
+                                  <td t-att-style="cell + ' text-align:right;'"><t t-esc="'{:,.2f}'.format(line.price_unit)"/></td>
+                                  <td t-att-style="cell + ' text-align:right;'"><t t-esc="'{:,.2f}'.format(line.price_unit * line.product_qty)"/></td>
+                                  <td t-att-style="cell + ' text-align:right;'"><t t-esc="'{:,.2f}'.format(line.price_unit * line.product_qty * (line.discount or 0) / 100)"/></td>
+                                  <td t-att-style="cell + ' text-align:right;'"><t t-esc="'{:,.2f}'.format(line.price_total)"/></td>
                               </t>
                               <t t-else="">
-                                  <td t-foreach="range(7)" t-as="col" style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;">&#160;</td>
+                                  <td t-foreach="range(7)" t-as="col" t-att-style="cell">&#160;</td>
                               </t>
                           </tr>
                       </t>
                   </tbody>
-                <tfoot>
-                  <tr>
-                      <!-- Description -->
-                      <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                          TOTAL
-                      </td>
-              
-                      <!-- Qty Total -->
-                      <td style="border:1px solid black; padding:5px; text-align:center; font-weight:bold;">
-                          <t t-esc="'{:,.2f}'.format(sum(doc.order_line.mapped('product_qty')))"/>
-                      </td>
-              
-                      <!-- Unit -->
-                      <td style="border:1px solid black; padding:5px; text-align:center; font-weight:bold;">
-                          -
-                      </td>
-              
-                      <!-- Unit Price -->
-                      <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                          -
-                      </td>
-              
-                      <!-- Total -->
-                      <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                          <t t-esc="'{:,.2f}'.format(sum(line.price_unit * line.product_qty for line in doc.order_line))"/>
-                      </td>
-              
-                      <!-- Discount -->
-                      <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                          0.00
-                      </td>
-              
-                      <!-- Net Amount -->
-                      <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                          <t t-esc="'{:,.2f}'.format(sum(doc.order_line.mapped('price_subtotal')))"/>
-                      </td>
-                  </tr>
-                  
-                </tfoot>
+                  <tfoot>
+                      <tr style="font-weight:bold;">
+                          <td style="border:1px solid black; padding:5px; text-align:right;">TOTAL</td>
+                          <td style="border:1px solid black; padding:5px; text-align:center;">
+                              <t t-esc="'{:,.2f}'.format(sum(doc.order_line.mapped('product_qty')))"/>
+                          </td>
+                          <td style="border:1px solid black; padding:5px; text-align:center;">-</td>
+                          <td style="border:1px solid black; padding:5px; text-align:right;">-</td>
+                          <td style="border:1px solid black; padding:5px; text-align:right;">
+                              <t t-esc="'{:,.2f}'.format(sum(l.price_unit * l.product_qty for l in doc.order_line))"/>
+                          </td>
+                          <td style="border:1px solid black; padding:5px; text-align:right;">
+                              <t t-esc="'{:,.2f}'.format(sum(l.price_unit * l.product_qty * (l.discount or 0) / 100 for l in doc.order_line))"/>
+                          </td>
+                          <td style="border:1px solid black; padding:5px; text-align:right;">
+                              <t t-esc="'{:,.2f}'.format(sum(doc.order_line.mapped('price_total')))"/>
+                          </td>
+                      </tr>
+                  </tfoot>
               </table>
-              <div style="text-align:right; font-weight:bold; font-size:13px; margin:px 0;">
-                Breakdown:
-              </div>
-              <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:5px;">
 
-                  <!-- ROW 1 -->
+              <!-- ===================== BOTTOM SECTION ===================== -->
+
+              <!-- Tax Breakdown + Prepared By -->
+              <t t-set="lbl" t-value="'border:1px solid black; border-top:none; padding:3px 6px; font-size:15px; font-weight:bold;'"/>
+              <t t-set="val" t-value="'border:1px solid black; border-top:none; padding:3px 6px; font-size:14px; text-align:right;'"/>
+              <table style="width:100%; border-collapse:collapse; page-break-inside:avoid;">
                   <tr>
-                      <!-- Amount in Words -->
-                      <td rowspan="2"
-                          style="width:65%; padding:8px; vertical-align:top; border:1px solid black; font-style:italic;">
+                      <!-- Left blank area (amount in words); delete the inner content to leave it empty like the sample -->
+                      <td rowspan="4" style="width:62%; border:1px solid black; border-top:none; padding:8px; vertical-align:top; font-size:13px; font-style:italic;">
                           <strong>Amount in words:</strong>
-                          ***
-                          <span t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/>
-                          ***
+                          *** <span t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/> ***
                       </td>
-              
-                      <td style="width:18%; padding:5px; text-align:right; border:1px solid black;">
-                          VATable:
-                      </td>
-              
-                      <td style="width:17%; padding:5px; text-align:right; border:1px solid black;">
-                          <t t-esc="'{:,.2f}'.format(doc.amount_untaxed or 0)"/>
-                      </td>
+                      <td t-att-style="lbl + ' width:22%;'">Vatable Sales</td>
+                      <td t-att-style="val + ' width:16%;'"><t t-esc="fmt(doc.amount_untaxed)"/></td>
                   </tr>
-              
-                  <!-- ROW 2 -->
                   <tr>
-                      <td style="padding:5px; text-align:right; border:1px solid black;">
-                          Zero Rated:
-                      </td>
-              
-                      <td style="padding:5px; text-align:right; border:1px solid black;">
-                          0.00
-                      </td>
+                      <td t-att-style="lbl">VAT-Exempt</td>
+                      <td t-att-style="val">-</td>
                   </tr>
-              
-                  <!-- ROW 3 -->
                   <tr>
-                      <!-- NOTES -->
-                      <td style="padding:1px; vertical-align:top; border:1px solid black;">
-                          <p style="font-size:14px; text-align:center; font-weight:bold; margin:0;">
-                              NOTES
-                          </p>
-                      </td>
-              
-                      <td style="padding:5px; text-align:right; border:1px solid black;">
-                          Exempt:
-                      </td>
-              
-                      <td style="padding:5px; text-align:right; border:1px solid black;">
-                          0.00
-                      </td>
+                      <td t-att-style="lbl">Zero-Rated</td>
+                      <td t-att-style="val">-</td>
                   </tr>
-              
-                  <!-- ROW 4 -->
                   <tr>
-                      <!-- VALUE OF NOTES - MERGED WITH ROW 5 -->
-                      <td rowspan="2"
-                          style="padding:8px; vertical-align:top; border:1px solid black;">
-                          <p style="font-size:11px; text-align:center; font-style:italic; margin:0;">
-                              Please issue Delivery Receipt and Sales Invoice attached to this Purchase Order upon delivery.
-                          </p>
-                      </td>
-              
-                      <td style="padding:5px; text-align:right; border:1px solid black;">
-                          VAT:
-                      </td>
-              
-                      <td style="padding:5px; text-align:right; border:1px solid black;">
-                          <t t-esc="'{:,.2f}'.format(doc.amount_tax or 0)"/>
-                      </td>
+                      <td t-att-style="lbl">VAT Amount</td>
+                      <td t-att-style="val"><t t-esc="fmt(doc.amount_tax)"/></td>
                   </tr>
-              
-                  <!-- ROW 5 -->
                   <tr>
-                      <td style="padding:5px; text-align:right; border:1px solid black; font-weight:bold;">
-                          Amount Due:
+                      <td style="border:1px solid black; border-top:none; padding:3px 6px; font-size:15px; font-weight:bold;">
+                          Prepared by: <t t-esc="doc.user_id.name or doc.create_uid.name"/>
                       </td>
-              
-                      <td style="padding:5px; text-align:right; border:1px solid black; font-weight:bold;">
-                          <t t-esc="'{:,.2f}'.format(doc.amount_total or 0)"/>
+                      <td t-att-style="lbl">Total Amount Due</td>
+                      <td t-att-style="val + ' font-weight:bold;'">
+                          <table style="width:100%; border-collapse:collapse;">
+                              <tr>
+                                  <td style="border:none; padding:0; text-align:left; font-weight:normal;">
+                                      <t t-esc="doc.currency_id.name"/>
+                                  </td>
+                                  <td style="border:none; padding:0; text-align:right;">
+                                      <t t-esc="'{:,.2f}'.format(doc.amount_total or 0)"/>
+                                  </td>
+                              </tr>
+                          </table>
                       </td>
                   </tr>
-              
               </table>
 
+              <!-- Acknowledgment / BIR (left) + Remit Payment / Terms (right) -->
+              <table style="width:100%; border-collapse:collapse; page-break-inside:avoid; font-size:12px;">
+                  <tr>
+                      <!-- LEFT COLUMN -->
+                      <td style="width:28%; border:1px solid black; border-top:none; padding:0; vertical-align:top;">
+                          <div style="padding:8px 8px 0 8px; text-align:center; font-size:13px; height:95px;">
+                              Client acknowledges that all items are received in good order and condition
+                          </div>
+                          <div style="margin:0 8px; border-top:1px solid black; padding:4px 0 6px 0; text-align:center; font-weight:bold;">
+                              Signature over Printed Name/Date
+                          </div>
+                          <div style="border-top:1px solid black; padding:6px 8px; line-height:1.2;">
+                              <t t-set="co" t-value="doc.company_id"/>
+                              <t t-set="bir_range" t-value="co.x_bir_ipo_range if doc.x_purchase_type == 'import' else co.x_bir_lpo_range"/>
+                              <strong style="font-size:14px;">BIR Permit No.:</strong><br/>
+                              <t t-esc="co.x_bir_permit_no or ''"/><br/>
+                              <strong style="font-size:14px;">Date Issued:</strong>
+                              <t t-esc="co.x_bir_permit_date.strftime('%B %-d, %Y') if co.x_bir_permit_date else ''"/><br/>
+                              <strong style="font-size:14px;">Range:</strong>
+                              <span style="white-space:nowrap; font-size:11px;"><t t-esc="bir_range or ''"/></span>
+                          </div>
+                      </td>
 
-              <!-- Signature Section -->
-              <div style="width:100%; font-size:13px; text-align:left; margin-top:20px;">
-            
-                <!-- Prepared By -->
-                <div style="display:inline-block; width:31%; vertical-align:top; margin-right:2%;">
-                    Prepared By:<br/>
-                    <div style="width:80%; border-bottom:1px solid black; height:40px;"></div>
-                    <div style="font-size:13px; margin-top:3px;">
-                        Signature over Printed Name
-                    </div>
-                    <div style="font-size:13px;">
-                        Date:
-                    </div>
-                </div>
-            
-                <!-- Checked/Approved By -->
-                <div style="display:inline-block; width:31%; vertical-align:top; margin-right:2%;">
-                    Checked/Approved By:<br/>
-                    <div style="width:80%; border-bottom:1px solid black; height:40px;"></div>
-                    <div style="font-size:13px; margin-top:3px;">
-                        Signature over Printed Name
-                    </div>
-                    <div style="font-size:13px;">
-                        Date:
-                    </div>
-                </div>
-            
-                <!-- Received By -->
-                <div style="display:inline-block; width:31%; vertical-align:top;">
-                    Received By:<br/>
-                    <div style="width:80%; border-bottom:1px solid black; height:40px;"></div>
-                    <div style="font-size:13px; margin-top:3px;">
-                        Signature over Printed Name
-                    </div>
-                    <div style="font-size:13px;">
-                        Date:
-                    </div>
-                </div>
-            
-              </div>
+                      <!-- RIGHT COLUMN -->
+                      <td style="width:72%; border:1px solid black; border-top:none; padding:8px; vertical-align:top;">
+                          <div style="font-size:16px; font-weight:bold; margin-bottom:8px;">
+                              PLEASE REMIT PAYMENT TO:
+                          </div>
+                          <div style="font-size:12px; font-weight:bold; margin-bottom:6px;">
+                              INNOVATHINK, CORPORATION
+                          </div>
+                          <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:10px;">
+                              <tr>
+                                  <td style="width:45%; border:none; padding:0 6px 0 0; vertical-align:top; font-weight:bold;">
+                                      BANK OF THE PHILIPPINE ISLANDS<br/>
+                                      LAS PINAS BRANCH
+                                  </td>
+                                  <td style="width:55%; border:none; padding:0; vertical-align:top;">
+                                      PESO ACCOUNT NO.: 8301 0031 38<br/>
+                                      USD ACCOUNT NO.: 8304-0402-39<br/>
+                                      SWIFT CODE: BOPIPHMM
+                                  </td>
+                              </tr>
+                          </table>
 
-              <p style="font-size:12px; margin-top:20px; text-align:left;">
-                Printed By: E-taxpoint Software Solutions Corp. (Open Edition - Tax Based Accounting System)<br/>
-                Acknowledgment Certificate No:<br/>
-                Acknowledgment Certificate Date Issued:<br/>
-                Permitted Series Range: IPO-000000000001 - IPO-999999999999
-              </p>
-
+                          <!-- Terms: uses the PO's own Terms and Conditions field, falls back to default text -->
+                          <div style="font-size:11px; line-height:1.15; text-align:justify;">
+                              <strong style="font-size:13px;">Terms and Conditions:</strong>
+                              <t t-if="doc.notes and doc.notes.striptags().strip()">
+                                  <t t-out="doc.notes"/>
+                              </t>
+                              <t t-else="">
+                                  Prices are FOB Manila unless otherwise stated. Our responsibility ceases upon
+                                  the receipt of goods by buyer or delivery to public carrier or buyer's carrier
+                                  in good order.
+                              </t>
+                          </div>
+                      </td>
+                  </tr>
+              </table>
 
             </main>
-            <div class="footer" style="font-family: Arial, sans-serif;">
-              <div style="text-align:center; font-size:16px; font-weight:bold;">
-                THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX
-              </div>
-            </div>
           </div>
+          </div>
+
+          <!-- FOOTER -->
+          <div class="footer" style="font-family: Arial, sans-serif;">
+              <table style="width:100%; border-collapse:collapse; font-size:13px; margin:0;">
+                  <tr>
+                      <td style="width:33%; border:none;"/>
+                      <td style="width:34%; border:none; padding:0; text-align:center; font-style:italic;">
+                          Page <span class="page"/> of <span class="topage"/>
+                      </td>
+                      <td style="width:33%; border:none; padding:0; text-align:right;">
+                          System Generated. No signature is required.
+                      </td>
+                  </tr>
+              </table>
+              <div style="text-align:center; font-size:14px; font-weight:bold; margin-top:0; line-height:1.1;">
+                  THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX
+              </div>
           </div>
         </t>
-      </t>
     </t>
   </template>
 

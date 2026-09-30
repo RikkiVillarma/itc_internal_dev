@@ -22,6 +22,7 @@
         'data/expense_type_data.xml',
         'data/rfp_sequence.xml',
         'data/account_move_sequence.xml',
+        
 
         #Report
         'report/sales_invoice_report.xml',
@@ -76,6 +77,7 @@
         # 'views/disbursement_menu.xml',
         'views/request_for_payment_views.xml',
         'views/account_tax_views.xml',
+        'views/res_company_views.xml',
        
 
     ],
