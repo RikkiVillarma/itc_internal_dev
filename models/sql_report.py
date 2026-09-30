@@ -78,7 +78,6 @@ REPORT_CATEGORIES = [
     ('none', 'None'),
 ]
 
-<<<<<<< HEAD
 _DISB_SUMMARY_SQL = """
         WITH cash_moves AS (
             SELECT
@@ -232,7 +231,6 @@ _DOC_REF_EXPR = """
                 ELSE am.name
             END
 """
-=======
 # Tax returns a SAWT can be attached to; the code goes into every SAWT DAT record
 SAWT_FORM_TYPES = [
     ('1702Q', '1702Q'),
@@ -242,7 +240,6 @@ SAWT_FORM_TYPES = [
     ('1702', '1702 (Annual)'),
     ('1701', '1701 (Annual)'),
 ]
->>>>>>> d20674b7704f28d7bd4b8e7db96f7ad7167cf8f2
 
 # -------------------------
 # Corresponding SQL Queries Mapping for reports
