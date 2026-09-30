@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+  <record id="view_company_form_bir_permit" model="ir.ui.view">
+    <field name="name">res.company.form.bir.permit</field>
+    <field name="model">res.company</field>
+    <field name="inherit_id" ref="base.view_company_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//notebook" position="inside">
+        <page string="BIR Permit" name="bir_permit">
+          <group>
+            <group>
+              <field name="x_bir_permit_no"/>
+              <field name="x_bir_permit_date"/>
+            </group>
+            <group>
+              <field name="x_bir_lpo_range"/>
+              <field name="x_bir_ipo_range"/>
+            </group>
+          </group>
+        </page>
+      </xpath>
+    </field>
+  </record>
+</odoo>

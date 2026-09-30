@@ -15,28 +15,29 @@
                             type="action"
                             class="oe_highlight"
                             invisible="partner_type != 'customer'"/>
-                            
+                    <button name="%(action_report_official_receipt)d"
+                            string="Print Official Receipt"
+                            type="action"
+                            class="oe_highlight"
+                            invisible="partner_type != 'customer'"/>
+
                     <button name="%(report_disbursement_voucher_custom)d"
                             string="Print Disbursement Voucher"
                             type="action"
                             class="oe_highlight"
                             invisible="partner_type != 'supplier'"/>
-                            
-                    
-                    
-                    
             </xpath>
             <!-- Add after payment method -->
             <xpath expr="//field[@name='payment_type']" position="after">
                 <field name="expense_type" invisible="partner_type != 'supplier'" domain="[('can_be_expensed', '=', True)]"/>
-                <field name="wht_tax_ids" 
-                       widget="many2many_tags" 
-                       options="{'no_create': True}" 
+                <field name="wht_tax_ids"
+                       widget="many2many_tags"
+                       options="{'no_create': True}"
                        readonly="state != 'draft'"/>
-                
-                <field name="wht_amount" 
-                       readonly="1" 
-                       force_save="1" 
+
+                <field name="wht_amount"
+                       readonly="1"
+                       force_save="1"
                        invisible="wht_amount == 0"/>
             </xpath>
 

@@ -44,6 +44,7 @@
                         <group>
                             <field name="name" widget="selection" />
                             <field name="report_category"/>
+                            <field name="sawt_form_type" invisible="name != 'sawt'" required="name == 'sawt'"/>
                         </group>
                         <group>
                             <field name="description" colspan="2" class="o_field_full_width"/>
