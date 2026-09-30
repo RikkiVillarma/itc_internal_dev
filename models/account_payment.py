@@ -1,5 +1,7 @@
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError, UserError
+import logging
+_logger = logging.getLogger(__name__)
 
 
 class AccountPayment(models.Model):
@@ -47,6 +49,13 @@ class AccountPayment(models.Model):
         compute="_compute_payment_net_amount",
         store=True,
         currency_field='currency_id'
+    )
+
+    collection_receipt_id = fields.Many2one(
+        'collection.receipt',
+        string='Collection Receipt',
+        copy=False,
+        readonly=True
     )
 
     @api.depends('wht_tax_ids', 'reconciled_invoice_ids', 'memo')
@@ -254,6 +263,8 @@ class AccountPayment(models.Model):
     # ------------------------------------------------------------------
     def action_post(self):
         res = super().action_post()
+
+        # Log WHT summary
         for payment in self.filtered('payment_tax_id'):
             payment.message_post(body=_(
                 "Withholding tax applied: %(tax)s — Base: %(base)s, WHT: %(tax_amt)s %(currency)s",
@@ -262,7 +273,51 @@ class AccountPayment(models.Model):
                 tax_amt=payment.payment_tax_amount,
                 currency=payment.currency_id.name,
             ))
+
+        # Auto-create Collection Receipt for customer inbound payments
+        for pay in self.filtered(
+            lambda p: p.partner_type == 'customer'
+            and p.payment_type == 'inbound'
+            and not p.collection_receipt_id
+        ):
+            try:
+                cr = self.env['collection.receipt'].create({
+                    'customer_id': pay.partner_id.id,
+                    'amount': pay.amount,
+                    'date': pay.date,
+                    'payment_id': pay.id,
+                    'state': 'confirmed',
+                    'currency_id': pay.currency_id.id,
+                    'company_id': pay.company_id.id,
+                })
+                cr.action_generate_pdf()
+                pay.collection_receipt_id = cr.id
+                _logger.info(
+                    "Collection Receipt %s created for Payment %s",
+                    cr.name, pay.name
+                )
+            except Exception as e:
+                _logger.exception(
+                    "Failed to create CR for Payment %s: %s", pay.name, e
+                )
+
         return res
+    
+    def action_view_collection_receipt(self):
+        """Open the linked Collection Receipt form."""
+        self.ensure_one()
+        if not self.collection_receipt_id:
+            raise UserError(
+                "No Collection Receipt linked to this payment yet."
+            )
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Collection Receipt',
+            'res_model': 'collection.receipt',
+            'res_id': self.collection_receipt_id.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
 
 
 class AccountPaymentRegister(models.TransientModel):
