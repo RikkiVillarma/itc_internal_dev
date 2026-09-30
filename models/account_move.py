@@ -20,6 +20,8 @@ class AccountMove(models.Model):
 
     x_reference_number = fields.Char(string="Reference Number", tracking=True)
 
+    x_payee_ref = fields.Char(string="Payee Reference", tracking=True)
+
     # -------------------------------------------------------------------------
     # OVERRIDES
     # -------------------------------------------------------------------------

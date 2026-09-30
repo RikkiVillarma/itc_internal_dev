@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-  <!-- QWeb Template: Official Receipt -->
+  <!-- QWeb Template: Collection Receipt (shared layout; title is set by receipt_title) -->
   <template id="report_custom_official_receipt_template">
-    <t t-call="web.external_layout">
+    <t t-call="web.basic_layout">
       <t t-foreach="docs" t-as="doc">
         <div class="page" style="font-family: Arial, sans-serif; font-size: 14px; line-height:1.4;">
           <main>
@@ -29,7 +29,7 @@
             <table style="width:100%; margin-bottom:15px; font-size:13px; border-collapse:collapse;">
               <tr>
                 <td style="width:60%; vertical-align:top; padding:5px; border:1px solid black;">
-                  <strong style="font-size:18px;">COLLECTION RECEIPT</strong><br/>
+                  <strong style="font-size:18px;"><t t-esc="receipt_title or 'COLLECTION RECEIPT'"/></strong><br/>
                   <strong>OR NO.:</strong> <span t-field="doc.name"/><br/>
                   <strong>BR:</strong> BR-00000-MAIN
                 </td>
@@ -243,13 +243,31 @@
     </t>
   </template>
 
-  <!-- REPORT ACTION for account.payment -->
+  <!-- QWeb Template: Official Receipt (same layout, different title) -->
+  <template id="report_official_receipt_template">
+    <t t-call="itc_internal_dev.report_custom_official_receipt_template">
+      <t t-set="receipt_title" t-value="'OFFICIAL RECEIPT'"/>
+    </t>
+  </template>
+
+  <!-- REPORT ACTION: Collection Receipt -->
   <record id="action_report_custom_official_receipt" model="ir.actions.report">
-    <field name="name">Official Receipt</field>
+    <field name="name">Collection Receipt</field>
     <field name="model">account.payment</field>
     <field name="report_type">qweb-pdf</field>
     <field name="report_name">itc_internal_dev.report_custom_official_receipt_template</field>
     <field name="print_report_name">'Collection Receipt - %s' % (object.name)</field>
+    <field name="binding_model_id" ref="account.model_account_payment"/>
+    <field name="binding_type">report</field>
+  </record>
+
+  <!-- REPORT ACTION: Official Receipt -->
+  <record id="action_report_official_receipt" model="ir.actions.report">
+    <field name="name">Official Receipt</field>
+    <field name="model">account.payment</field>
+    <field name="report_type">qweb-pdf</field>
+    <field name="report_name">itc_internal_dev.report_official_receipt_template</field>
+    <field name="print_report_name">'Official Receipt - %s' % (object.name)</field>
     <field name="binding_model_id" ref="account.model_account_payment"/>
     <field name="binding_type">report</field>
   </record>
