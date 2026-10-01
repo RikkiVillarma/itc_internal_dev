@@ -66,6 +66,7 @@ REPORT_NAMES = [
     ('withholding_tax_book', 'Withholding Tax Book'),
     ('form_1601e', 'Form 1601E'),
     ('form_1601eq', 'Form 1601EQ'),
+    ('cash_flow_statement', 'Cash Flow Statement'),
 ]
 
 # Categories for various reports, can be expanded as needed.
@@ -1580,6 +1581,22 @@ class SqlReport(models.Model):
     from_date = fields.Date("From Date", required=True)
     to_date = fields.Date("To Date", required=True)
     journal_id = fields.Many2one("account.journal", string="Sales Journal",domain="[('type', '=', 'sale')]",)
+    cash_flow_journal_ids = fields.Many2many(
+        "account.journal",
+        "custom_sql_report_cash_flow_journal_rel",
+        "report_id",
+        "journal_id",
+        string="Cash Flow Journals",
+        domain="[('type', 'in', ('bank', 'cash', 'general')), ('company_id', 'in', allowed_company_ids)]",
+    )
+    trial_balance_journal_ids = fields.Many2many(
+        "account.journal",
+        "custom_sql_report_trial_balance_journal_rel",
+        "report_id",
+        "journal_id",
+        string="Trial Balance Journals",
+        domain="[('company_id', 'in', allowed_company_ids)]",
+    )
 
     sql_query = fields.Text("SQL Query")
     
@@ -1677,6 +1694,113 @@ class SqlReport(models.Model):
             self.from_date = f'{self.year}-01-01'
             self.to_date = f'{self.year}-12-31'
 
+    def _get_cash_flow_statement_rows(self):
+        self.ensure_one()
+        if not self.from_date or not self.to_date or self.from_date > self.to_date:
+            raise ValidationError("Select a valid Cash Flow Statement date range.")
+
+        report = self.env.ref('account_reports.cash_flow_report', raise_if_not_found=False)
+        if not report:
+            raise UserError("The Odoo Cash Flow Statement report is unavailable. Install the account_reports module.")
+
+        previous_options = {
+            'selected_variant_id': report.id,
+            'date': {
+                'date_from': fields.Date.to_string(self.from_date),
+                'date_to': fields.Date.to_string(self.to_date),
+                'mode': 'range',
+                'filter': 'custom',
+            },
+            'show_account': True,
+            'show_currency': True,
+        }
+        journals = self.cash_flow_journal_ids.filtered(
+            lambda journal: journal.company_id == self.env.company
+            and journal.type in ('bank', 'cash', 'general')
+        )
+        if journals:
+            previous_options['journals'] = [
+                {'id': journal.id, 'model': 'account.journal', 'selected': True}
+                for journal in journals
+            ]
+
+        options = report.get_options(previous_options)
+        report_lines = report._get_lines(options)
+        rows = []
+        for line in report_lines:
+            columns = line.get('columns') or []
+            balance = columns[0].get('no_format', 0.0) if columns else 0.0
+            label = f"{'  ' * line.get('level', 0)}{line.get('name', '')}"
+            rows.append((label, balance or 0.0))
+        return ['Cash Flow Statement', 'Balance'], rows
+
+    def _get_trial_balance_rows(self):
+        self.ensure_one()
+        if not self.from_date or not self.to_date or self.from_date > self.to_date:
+            raise ValidationError("Select a valid Trial Balance date range.")
+
+        report = self.env.ref('account_reports.trial_balance_report', raise_if_not_found=False)
+        if not report:
+            raise UserError("The Odoo Trial Balance report is unavailable. Install the account_reports module.")
+
+        previous_options = {
+            'selected_variant_id': report.id,
+            'date': {
+                'date_from': fields.Date.to_string(self.from_date),
+                'date_to': fields.Date.to_string(self.to_date),
+                'mode': 'range',
+                'filter': 'custom',
+            },
+            'show_account': True,
+            'show_currency': True,
+        }
+        journals = self.trial_balance_journal_ids.filtered(
+            lambda journal: journal.company_id == self.env.company
+        )
+        if journals:
+            previous_options['journals'] = [
+                {'id': journal.id, 'model': 'account.journal', 'selected': True}
+                for journal in journals
+            ]
+
+        options = report.get_options(previous_options)
+        report_lines = report._get_lines(options)
+        columns = [
+            'Account',
+            'Initial Debit',
+            'Initial Credit',
+            'Period Debit',
+            'Period Credit',
+            'Ending Debit',
+            'Ending Credit',
+        ]
+        rows = []
+        for line in report_lines:
+            balance_columns = line.get('columns') or []
+            balances = [column.get('no_format') or 0.0 for column in balance_columns]
+            balances = (balances + [0.0] * 6)[:6]
+            label = f"{'  ' * line.get('level', 0)}{line.get('name', '')}"
+            rows.append(tuple([label, *balances]))
+        return columns, rows
+
+    def _is_summary_total_row(self, row, columns):
+        if not columns:
+            return False
+        label = str(row.get(columns[0], '')).strip()
+        if self.name == 'trial_balance':
+            return label.lower() == 'total'
+        if self.name == 'cash_flow_statement':
+            return label in {
+                'Cash and cash equivalents, beginning of period',
+                'Net increase in cash and cash equivalents',
+                'Cash flows from operating activities',
+                'Cash flows from investing & extraordinary activities',
+                'Cash flows from financing activities',
+                'Cash flows from unclassified activities',
+                'Cash and cash equivalents, closing balance',
+            }
+        return False
+
     """ Generate Report Action"""
     def action_execute_query(self):
         self.ensure_one()
@@ -1684,24 +1808,27 @@ class SqlReport(models.Model):
         if self.report_category not in ['books', 'annex', 'other_reports', 'tax_returns']:
             raise ValidationError("Please select a valid report category.")
 
-        # Get the sql queries based on selected report
-        sql = SQL_QUERIES.get(self.name)
-        if not sql:
-            raise ValidationError("Please select a valid report.")
-
         try:
-            # Execute queries
-            self.env.cr.execute(sql, (self.from_date, self.to_date))
-            # Get columns based on description
-            columns = [desc[0] for desc in self.env.cr.description]
-            # fetch all rows based on the query
-            rows = self.env.cr.fetchall()
+            if self.name == 'cash_flow_statement':
+                columns, rows = self._get_cash_flow_statement_rows()
+            elif self.name == 'trial_balance':
+                columns, rows = self._get_trial_balance_rows()
+            else:
+                sql = SQL_QUERIES.get(self.name)
+                if not sql:
+                    raise ValidationError("Please select a valid report.")
+                self.env.cr.execute(sql, (self.from_date, self.to_date))
+                columns = [desc[0] for desc in self.env.cr.description]
+                rows = self.env.cr.fetchall()
 
             serializable_rows, row_html_parts = [], []
             numeric_totals = {col: 0 for col in columns}
 
             for row in rows:
                 row_dict, cells = {}, []
+                is_summary_total = self._is_summary_total_row(
+                    {columns[0]: row[0]} if columns and row else {}, columns
+                )
                 for col, val in zip(columns, row):
                     if isinstance(val, bool):
                         # bool is a subclass of int — must be checked first,
@@ -1715,9 +1842,12 @@ class SqlReport(models.Model):
                         val = formatted_val
                     row_dict[col] = val
                     align = "right" if isinstance(val, str) and val.replace(",", "").replace(".", "").isdigit() else "left"
-                    cells.append(f"<td style='min-width:150px; text-align:{align};'>{val or ''}</td>")
+                    whitespace = "white-space:pre;" if self.name == 'trial_balance' and col == columns[0] else ""
+                    weight = "font-weight:bold;" if is_summary_total else ""
+                    cells.append(f"<td style='min-width:150px; text-align:{align}; {whitespace} {weight}'>{val or ''}</td>")
                 serializable_rows.append(row_dict)
-                row_html_parts.append(f"<tr>{''.join(cells)}</tr>")
+                row_style = "font-weight:bold;" if is_summary_total else ""
+                row_html_parts.append(f"<tr style='{row_style}'>{''.join(cells)}</tr>")
 
             # --- Compute Totals ---
             total_cells = []
@@ -1732,7 +1862,13 @@ class SqlReport(models.Model):
                 else:
                     total_cells.append("<td></td>")
 
-            total_row_html = f"<tr style='background-color:#f0f0f0;'>{''.join(total_cells)}</tr>"
+            total_footer_html = ""
+            if self.name not in ('cash_flow_statement', 'trial_balance'):
+                total_footer_html = f"""
+                    <tfoot style="position: sticky; bottom: 0; background-color: #f0f0f0; z-index: 2; font-weight: bold;">
+                        <tr>{''.join(total_cells)}</tr>
+                    </tfoot>
+                """
 
             # --- Build Final Table ---
             table_html = f"""
@@ -1756,11 +1892,7 @@ class SqlReport(models.Model):
                         <tbody>
                             {''.join(row_html_parts)}
                         </tbody>
-                        <tfoot style="position: sticky; bottom: 0; background-color: #f0f0f0; z-index: 2; font-weight: bold;">
-                            <tr>
-                                {"".join(total_cells)}
-                            </tr>
-                        </tfoot>
+                        {total_footer_html}
                     </table>
                 </div>
             """
@@ -1810,6 +1942,8 @@ class SqlReport(models.Model):
         small_format = workbook.add_format({'font_size': 9})
         text_format = workbook.add_format({'text_wrap': True, 'valign': 'top', 'border': 1, 'align': 'left'})
         number_format = workbook.add_format({'num_format': '#,##0.00', 'border': 1, 'align': 'right', 'valign': 'top'})
+        bold_text_format = workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'border': 1, 'align': 'left'})
+        bold_number_format = workbook.add_format({'bold': True, 'num_format': '#,##0.00', 'border': 1, 'align': 'right', 'valign': 'top'})
         total_format = workbook.add_format({'num_format': '#,##0.00', 'bold': True, 'border': 1, 'align': 'right', 'valign': 'top', 'bg_color': '#f0f0f0'})
         total_label_format = workbook.add_format({'bold': True, 'border': 1, 'align': 'left', 'valign': 'top', 'bg_color': '#f0f0f0'})
 
@@ -1848,6 +1982,9 @@ class SqlReport(models.Model):
         # === Table Rows ===
         totals = {col: 0 for col in columns}
         for row_idx, row in enumerate(rows, start=start_row + 1):
+            is_summary_total = self._is_summary_total_row(row, columns)
+            row_text_format = bold_text_format if is_summary_total else text_format
+            row_number_format = bold_number_format if is_summary_total else number_format
             for col_idx, col_name in enumerate(columns):
                 val = row.get(col_name, "")
                 
@@ -1855,32 +1992,32 @@ class SqlReport(models.Model):
                 if isinstance(val, (int, float)):
                     totals[col_name] += val
                     if val == 0:
-                        worksheet.write(row_idx, col_idx, "-", text_format)
+                        worksheet.write(row_idx, col_idx, "-", row_text_format)
                     else:
-                        worksheet.write_number(row_idx, col_idx, val, number_format)
+                        worksheet.write_number(row_idx, col_idx, val, row_number_format)
                 else:
                     # Try parsing numeric strings (e.g., "1234" or "1,234.56")
                     try:
                         float_val = float(str(val).replace(",", ""))
                         totals[col_name] += float_val
                         if float_val == 0:
-                            worksheet.write(row_idx, col_idx, "-", text_format)
+                            worksheet.write(row_idx, col_idx, "-", row_text_format)
                         else:
-                            worksheet.write_number(row_idx, col_idx, float_val, number_format)
+                            worksheet.write_number(row_idx, col_idx, float_val, row_number_format)
                     except Exception:
-                        worksheet.write(row_idx, col_idx, val, text_format)
+                        worksheet.write(row_idx, col_idx, val, row_text_format)
 
 
-        # === Write Total Row ===
-        total_row_idx = start_row + 1 + len(rows)
-        for col_idx, col_name in enumerate(columns):
-            total_val = totals.get(col_name)
-            if col_idx == 0:
-                worksheet.write(total_row_idx, col_idx, "TOTAL", total_label_format)
-            elif isinstance(total_val, (int, float)) and total_val != 0:
-                worksheet.write_number(total_row_idx, col_idx, total_val, total_format)
-            else:
-                worksheet.write(total_row_idx, col_idx, "", total_label_format)
+        if self.name not in ('cash_flow_statement', 'trial_balance'):
+            total_row_idx = start_row + 1 + len(rows)
+            for col_idx, col_name in enumerate(columns):
+                total_val = totals.get(col_name)
+                if col_idx == 0:
+                    worksheet.write(total_row_idx, col_idx, "TOTAL", total_label_format)
+                elif isinstance(total_val, (int, float)) and total_val != 0:
+                    worksheet.write_number(total_row_idx, col_idx, total_val, total_format)
+                else:
+                    worksheet.write(total_row_idx, col_idx, "", total_label_format)
 
         workbook.close()
         output.seek(0)
