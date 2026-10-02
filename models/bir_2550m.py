@@ -24,10 +24,12 @@ class Bir2550mSch1Line(models.Model):
                                    compute="_compute_output_tax", store=True)
     currency_id  = fields.Many2one(related="bir_id.currency_id", store=True)
 
-    @api.depends("sales_amount")
+    @api.depends("sales_amount", "industry")
     def _compute_output_tax(self):
         for rec in self:
-            rec.output_tax = round(rec.sales_amount * 0.12, 2)
+            classification = (rec.industry or '').upper()
+            is_non_vatable = 'ZERO' in classification or 'EXEMPT' in classification
+            rec.output_tax = 0.0 if is_non_vatable else round(rec.sales_amount * 0.12, 2)
 
 
 class Bir2550mSch2Line(models.Model):
@@ -57,6 +59,7 @@ class Bir2550mSch3Line(models.Model):
     _order = "date_purchased, id"
 
     bir_id             = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
+    source_move_line_id = fields.Many2one("account.move.line", copy=False, index=True, ondelete="set null")
     is_previous_period = fields.Boolean(string="Previous Period", default=False,
                                         help="Check if this is a previous period purchase carried over.")
     date_purchased     = fields.Date(string="Date Purchased")
@@ -186,6 +189,7 @@ class Bir2550mSch6Line(models.Model):
     _order = "id"
 
     bir_id              = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
+    source_payment_id   = fields.Many2one("account.payment", copy=False, index=True, ondelete="set null")
     period_covered      = fields.Char(string="Period Covered")
     withholding_agent   = fields.Char(string="Name of Withholding Agent")
     income_payment      = fields.Monetary(string="Income Payment", currency_field="currency_id")
@@ -201,6 +205,7 @@ class Bir2550mSch7Line(models.Model):
     _order = "id"
 
     bir_id             = fields.Many2one("bir.2550m", ondelete="cascade", required=True)
+    source_payment_id  = fields.Many2one("account.payment", copy=False, index=True, ondelete="set null")
     period_covered     = fields.Char(string="Period Covered")
     miller_name        = fields.Char(string="Name of Miller")
     taxpayer_name      = fields.Char(string="Taxpayer Name")
@@ -303,53 +308,68 @@ class Bir2550M(models.Model):
     #       Only Items 18–23 are individual fields below.
     # =====================================================
 
+    # ── ITEM 17: Total Taxable Sales / Total Tax Due ──────
+    item_17a = fields.Monetary(
+        string="17A Total Taxable Sales",
+        compute="_compute_item_17",
+        currency_field="currency_id")
+    item_17b = fields.Monetary(
+        string="17B Total Tax Due",
+        compute="_compute_item_17",
+        currency_field="currency_id")
+
     # ── ITEM 18: Less: Input Taxes ────────────────────────
     item_18a = fields.Monetary(
         string="18A Transitional/Presumptive Input Tax",
         currency_field="currency_id")
     item_18b = fields.Monetary(
         string="18B Carried Over from Previous Return Period",
+        compute="_compute_item_18b",
         currency_field="currency_id")
     item_18c = fields.Monetary(
         string="18C On Taxable Goods/Services",
+        compute="_compute_item_18c",
         currency_field="currency_id")
     item_18d = fields.Monetary(
         string="18D Total Available Input Taxes",
-        compute="_compute_item18d", store=True,
+        compute="_compute_item18d",
         currency_field="currency_id")
     item_18e = fields.Monetary(
         string="18E Less: Any Refund/TCC Claimed",
         currency_field="currency_id")
     item_18f = fields.Monetary(
         string="18F Net Creditable Input Tax",
-        compute="_compute_item18f", store=True,
+        compute="_compute_item18f",
         currency_field="currency_id")
 
     # ── ITEM 19: VAT Payable (Excess Input Tax) ───────────
     item_19 = fields.Monetary(
         string="19 VAT Payable (Excess Input Tax)",
-        compute="_compute_item19", store=True,
+        compute="_compute_item19",
         currency_field="currency_id")
 
     # ── ITEM 20: Less: Tax Credits/Payments ───────────────
     item_20a = fields.Monetary(
         string="20A Advance Payments",
+        compute="_compute_item_20abc",
         currency_field="currency_id")
     item_20b = fields.Monetary(
         string="20B Creditable Value-added Tax Withheld",
+        compute="_compute_item_20abc",
         currency_field="currency_id")
     item_20c = fields.Monetary(
         string="20C VAT Paid in Return Previously Filed",
+        compute="_compute_item_20abc",
         currency_field="currency_id")
     item_20d = fields.Monetary(
         string="20D Total Tax Credits/Payments",
-        compute="_compute_item20d", store=True,
+        compute="_compute_item20d",
         currency_field="currency_id")
 
     # ── ITEM 21: Tax Payable/(Overpayment) ────────────────
     item_21 = fields.Monetary(
         string="21 Tax Payable/(Overpayment)",
-        compute="_compute_item21", store=True,
+        compute="_compute_item21",
         currency_field="currency_id")
 
     # ── ITEM 22: Penalties ────────────────────────────────
@@ -364,13 +384,13 @@ class Bir2550M(models.Model):
         currency_field="currency_id")
     item_22d = fields.Monetary(
         string="22D Total Penalties",
-        compute="_compute_item22d", store=True,
+        compute="_compute_item22d",
         currency_field="currency_id")
 
     # ── ITEM 23: Total Amount Payable/(Overpayment) ───────
     item_23 = fields.Monetary(
         string="23 Total Amount Payable/(Overpayment)",
-        compute="_compute_item23", store=True,
+        compute="_compute_item23",
         currency_field="currency_id")
 
     # ── Payment Details ────────────────────────────────────
@@ -488,6 +508,49 @@ class Bir2550M(models.Model):
             ])
             rec.registered_address = ", ".join(parts)
 
+    @api.depends('sch6_ids.applied_current_mo',
+             'sch7_ids.applied_current_mo',
+             'sch8_ids.applied_current_mo')
+    def _compute_item_20abc(self):
+        for rec in self:
+            rec.item_20a = sum(rec.sch7_ids.mapped('applied_current_mo'))
+            rec.item_20b = sum(rec.sch6_ids.mapped('applied_current_mo'))
+            rec.item_20c = sum(rec.sch8_ids.mapped('applied_current_mo'))
+    
+    @api.depends('date_from', 'date_to', 'company_id')
+    def _compute_item_17(self):
+        """Item 17A/17B = Output VAT from Sales Invoices (out_invoice)."""
+        for rec in self:
+            if not rec.date_from or not rec.date_to:
+                rec.item_17a = rec.item_17b = 0.0
+                continue
+
+            AML = self.env['account.move.line']
+            sales_lines = AML.search([
+                ('account_id.account_type', 'in', ['income', 'income_other']),
+                ('date', '>=', rec.date_from),
+                ('date', '<=', rec.date_to),
+                ('move_id.state', '=', 'posted'),
+                ('move_id.move_type', 'in', ['out_invoice', 'out_refund']),
+                ('company_id', '=', rec.company_id.id),
+            ])
+            output_tax_lines = AML.search([
+                ('tax_line_id.amount', '=', 12),
+                ('date', '>=', rec.date_from),
+                ('date', '<=', rec.date_to),
+                ('move_id.state', '=', 'posted'),
+                ('move_id.move_type', 'in', ['out_invoice', 'out_refund']),
+                ('company_id', '=', rec.company_id.id),
+            ])
+
+            taxable_sales = 0.0
+            for line in sales_lines:
+                if any(tax.amount == 12 for tax in line.tax_ids):
+                    taxable_sales += line.credit - line.debit
+
+            rec.item_17a = round(taxable_sales, 2)
+            rec.item_17b = round(sum(-line.balance for line in output_tax_lines), 2)
+
     # =====================================================
     # COMPUTES - ITEMS 18 to 23
     # =====================================================
@@ -502,15 +565,10 @@ class Bir2550M(models.Model):
         for rec in self:
             rec.item_18f = rec.item_18d - rec.item_18e
 
-    @api.depends("item_18f", "sch1_ids.output_tax")
+    @api.depends("item_17b", "item_18f")
     def _compute_item19(self):
-        """
-        Item 19 = Item 17B (Total Tax Due) less Item 18F (Net Creditable Input Tax)
-        Item 17B = sum of sch1_ids.output_tax (the loop in XML).
-        """
         for rec in self:
-            total_tax_due = sum(rec.sch1_ids.mapped("output_tax")) or 0.0
-            rec.item_19 = total_tax_due - rec.item_18f
+            rec.item_19 = rec.item_17b - rec.item_18f
 
     @api.depends("item_20a", "item_20b", "item_20c")
     def _compute_item20d(self):
@@ -582,9 +640,34 @@ class Bir2550M(models.Model):
         }
         return months.get(self.month or "1", "")
 
+    @api.depends('year', 'month', 'company_id')
+    def _compute_item_18b(self):
+        for rec in self:
+            if not rec.year or not rec.month:
+                rec.item_18b = 0.0
+                continue
+
+            prev_month = int(rec.month) - 1
+            prev_year = rec.year
+            if prev_month == 0:
+                prev_month = 12
+                prev_year -= 1
+
+            prev_return = self.search([
+                ('company_id', '=', rec.company_id.id),
+                ('year', '=', prev_year),
+                ('month', '=', str(prev_month)),
+                ('state', 'in', ('confirmed', 'filed')),
+            ], limit=1)
+
+            if prev_return and prev_return.item_19 < 0:
+                rec.item_18b = abs(prev_return.item_19)
+            else:
+                rec.item_18b = 0.0
+
     def _action_generate_data_legacy_direct(self):
         """
-        Auto-generate Sch 1 (Vatable Sales) and Sch 2 (Capital Goods ≤ ₱1M)
+        Auto-generate Sch 1 (Vatable/Zero/Exempt) at Sch 2 (Capital Goods ≤ ₱1M)
         from posted journal entries.
         """
         for rec in self:
@@ -598,36 +681,56 @@ class Bir2550M(models.Model):
             date_to    = rec.date_to
             AML        = self.env["account.move.line"]
 
-            # ── Vatable Sales → Sch 1 ──
+            # ─────────────────────────────────────────────
+            # Sch 1: Sales by Tax Type (Vatable / Zero-Rated / Exempt)
+            # ─────────────────────────────────────────────
             sales_lines = AML.search([
                 ("account_id.account_type", "in", ["income", "income_other"]),
-                ("date", ">=", date_from), ("date", "<=", date_to),
+                ("date", ">=", date_from),
+                ("date", "<=", date_to),
                 ("move_id.state", "=", "posted"),
                 ("move_id.move_type", "in", ["out_invoice", "out_refund"]),
                 ("company_id", "=", company_id),
-                ("credit", ">", 0),
             ])
 
             rec.sch1_ids.unlink()
+
             if sales_lines:
                 from collections import defaultdict
-                by_account = defaultdict(float)
+                by_tax_type = defaultdict(float)
+
                 for sl in sales_lines:
-                    by_account[sl.account_id.name] += (sl.credit - sl.debit)
+                    net_amount = sl.credit - sl.debit
+
+                    # Fallback kung walang tax_ids: treat as Vatable
+                    if not sl.tax_ids:
+                        by_tax_type['VATABLE'] += net_amount
+                        continue
+
+                    for tax in sl.tax_ids:
+                        tax_name = (tax.name or '').upper()
+                        if tax.amount == 12:
+                            by_tax_type['VATABLE'] += net_amount
+                        elif tax.amount == 0 and ('ZERO' in tax_name or 'ZR' in tax_name):
+                            by_tax_type['ZERO_RATED'] += net_amount
+                        elif tax.amount == 0 and 'EXEMPT' in tax_name:
+                            by_tax_type['EXEMPT'] += net_amount
 
                 sch1_vals = []
-                for account_name, amount in by_account.items():
+                for tax_type, amount in by_tax_type.items():
                     if amount > 0:
                         sch1_vals.append({
                             "bir_id": rec.id,
-                            "industry": account_name,
+                            "industry": f"{tax_type} Sales",
                             "atc": "",
                             "sales_amount": round(amount, 2),
                         })
                 if sch1_vals:
                     self.env["bir.2550m.sch1"].create(sch1_vals)
 
-            # ── Capital Goods Purchases → Sch 2 ──
+            # ─────────────────────────────────────────────
+            # Sch 2: Capital Goods ≤ ₱1M
+            # ─────────────────────────────────────────────
             capital_accounts = self.env["account.account"].search([
                 ("account_type", "in", ["asset_fixed", "asset_non_current"]),
             ])
@@ -636,7 +739,8 @@ class Bir2550M(models.Model):
             if capital_accounts:
                 cap_lines = AML.search([
                     ("account_id", "in", capital_accounts.ids),
-                    ("date", ">=", date_from), ("date", "<=", date_to),
+                    ("date", ">=", date_from),
+                    ("date", "<=", date_to),
                     ("move_id.state", "=", "posted"),
                     ("company_id", "=", company_id),
                     ("debit", ">", 0),
@@ -644,7 +748,7 @@ class Bir2550M(models.Model):
                 sch2_vals = []
                 for cl in cap_lines:
                     net_of_vat = round((cl.debit - cl.credit) / 1.12, 2)
-                    if net_of_vat > 0 and net_of_vat <= 1_000_000:
+                    if 0 < net_of_vat <= 1_000_000:
                         sch2_vals.append({
                             "bir_id": rec.id,
                             "date_purchased": cl.date,
@@ -654,6 +758,9 @@ class Bir2550M(models.Model):
                 if sch2_vals:
                     self.env["bir.2550m.sch2"].create(sch2_vals)
 
+            # ─────────────────────────────────────────────
+            # Sync and Update State
+            # ─────────────────────────────────────────────
             rec._sync_from_schedules()
 
             rec.state = "generated"
@@ -664,6 +771,319 @@ class Bir2550M(models.Model):
                     f"Sch 2: {len(rec.sch2_ids)} line(s). "
                     "Please review and fill in Schedules 3–8 manually."
                 )
+            )   
+    @api.depends(
+        'date_from', 'date_to', 'company_id',
+        'sch2_ids.input_tax',
+        'sch3_ids.allowable_input_tax',
+    )
+    def _compute_item_18c(self):
+        """Item 18C = Input VAT from vatable purchases + Sch 2 + Sch 3."""
+        for rec in self:
+            if not rec.date_from or not rec.date_to:
+                rec.item_18c = 0.0
+                continue
+
+            AML = self.env['account.move.line']
+            purchase_lines = AML.search([
+                ('account_id.account_type', 'in',
+                ['expense', 'expense_direct_cost', 'asset_current']),
+                ('date', '>=', rec.date_from),
+                ('date', '<=', rec.date_to),
+                ('move_id.state', '=', 'posted'),
+                ('move_id.move_type', 'in', ['in_invoice', 'in_refund']),
+                ('company_id', '=', rec.company_id.id),
+            ])
+
+            input_vat = 0.0
+            for line in purchase_lines:
+                vat_taxes = line.tax_ids.filtered(lambda tax: tax.amount == 12)
+                if not vat_taxes:
+                    continue
+                tax_values = vat_taxes.compute_all(
+                    line.price_unit * (1 - (line.discount or 0.0) / 100),
+                    currency=line.currency_id,
+                    quantity=line.quantity,
+                    product=line.product_id,
+                    partner=line.partner_id,
+                )
+                line_vat = sum(tax['amount'] for tax in tax_values['taxes'])
+                if line.move_id.move_type == 'in_refund':
+                    line_vat = -line_vat
+                input_vat += line.currency_id._convert(
+                    line_vat, rec.currency_id, rec.company_id, line.date
+                )
+
+            input_vat += sum(rec.sch2_ids.mapped('input_tax'))
+            input_vat += sum(rec.sch3_ids.mapped('allowable_input_tax'))
+
+            rec.item_18c = round(input_vat, 2)
+    
+    def action_generate_sch6(self):
+        """Pull creditable VAT withheld from customer payments."""
+        for rec in self:
+            if rec.state not in ('draft', 'generated'):
+                raise UserError("Only Draft or Generated returns can pull data.")
+            
+            # Search customer payments within period
+            Payment = self.env['account.payment']
+            payments = Payment.search([
+                ('payment_type', '=', 'inbound'),
+                ('partner_type', '=', 'customer'),
+                ('state', '=', 'paid'),
+                ('date', '>=', rec.date_from),
+                ('date', '<=', rec.date_to),
+                ('company_id', '=', rec.company_id.id),
+            ])
+            
+            values_by_payment = {}
+            for pay in payments:
+                vat_withheld = self._compute_vat_withheld_from_payment(pay)
+                if vat_withheld > 0:
+                    values_by_payment[pay.id] = {
+                        'bir_id': rec.id,
+                        'source_payment_id': pay.id,
+                        'period_covered': f"{rec._get_month_name()} {rec.year}",
+                        'withholding_agent': pay.partner_id.name,
+                        'income_payment': pay.amount,
+                        'total_tax_withheld': vat_withheld,
+                        'applied_current_mo': vat_withheld,
+                    }
+
+            existing_lines = rec.sch6_ids.filtered('source_payment_id')
+            stale_lines = existing_lines.filtered(lambda line: line.source_payment_id.id not in values_by_payment)
+            if stale_lines:
+                raise UserError(
+                    "Schedule 6 has generated lines from payments outside the current period or eligibility rules. "
+                    "Review those lines before regenerating."
+                )
+
+            existing_by_payment = {line.source_payment_id.id: line for line in existing_lines}
+            for payment_id, values in values_by_payment.items():
+                existing = existing_by_payment.get(payment_id)
+                if existing:
+                    existing.write(values)
+                else:
+                    self.env['bir.2550m.sch6'].create(values)
+            
+            rec._sync_from_schedules()
+            
+            rec.message_post(
+                body=f"Schedule 6 synchronized from {len(values_by_payment)} payment(s)."
+            )
+
+    
+    def action_generate_sch3(self):
+        """Pull capital goods > ₱1M from asset accounts."""
+        for rec in self:
+            if rec.state not in ('draft', 'generated'):
+                raise UserError("Only Draft or Generated returns can pull data.")
+            
+            AML = self.env['account.move.line']
+            capital_accounts = self.env['account.account'].search([
+                ('account_type', 'in', ['asset_fixed', 'asset_non_current']),
+            ])
+            
+            cap_lines = AML.search([
+                ('account_id', 'in', capital_accounts.ids),
+                ('date', '>=', rec.date_from),
+                ('date', '<=', rec.date_to),
+                ('move_id.state', '=', 'posted'),
+                ('move_id.move_type', '=', 'in_invoice'),
+                ('company_id', '=', rec.company_id.id),
+            ])
+            cap_lines = cap_lines.filtered(lambda line: any(tax.amount == 12 for tax in line.tax_ids))
+            source_lines = cap_lines.filtered(lambda line: line.balance > 1_000_000)
+            existing_lines = rec.sch3_ids.filtered('source_move_line_id')
+            stale_lines = existing_lines.filtered(lambda line: line.source_move_line_id not in source_lines)
+            if stale_lines:
+                raise UserError(
+                    "Schedule 3 has generated lines from purchases outside the current period or eligibility rules. "
+                    "Review those lines before regenerating."
+                )
+
+            existing_by_source = {line.source_move_line_id.id: line for line in existing_lines}
+            for source_line in source_lines:
+                values = {
+                    'date_purchased': source_line.date,
+                    'description': source_line.name or source_line.move_id.ref or source_line.account_id.name,
+                    'amount': source_line.balance,
+                }
+                existing = existing_by_source.get(source_line.id)
+                if existing:
+                    existing.write(values)
+                else:
+                    self.env['bir.2550m.sch3'].create({
+                        **values,
+                        'bir_id': rec.id,
+                        'source_move_line_id': source_line.id,
+                        'est_life_months': 60,
+                    })
+
+            rec.message_post(
+                body=f"Schedule 3 synchronized with {len(source_lines)} asset(s). "
+                    f"Please review estimated life (months)."
+            )
+
+    def _compute_vat_withheld_from_payment(self, pay):
+        """Extract VAT WHT from payment's withholding tax lines."""
+        vat_withheld = 0.0
+
+        if not pay.move_id:
+            return 0.0
+
+        for line in pay.move_id.line_ids:
+            if line.tax_line_id and 'VAT' in (line.tax_line_id.name or '').upper():
+                vat_withheld += abs(line.balance)
+
+        return round(vat_withheld, 2)
+    
+    def action_generate_sch8(self):
+        """Pull VAT withheld on government sales from customer payments."""
+        for rec in self:
+            if rec.state not in ('draft', 'generated'):
+                raise UserError("Only Draft or Generated returns can pull data.")
+
+            
+            Payment = self.env['account.payment']
+            payments = Payment.search([
+                ('payment_type', '=', 'inbound'),
+                ('partner_type', '=', 'customer'),
+                ('state', '=', 'paid'),
+                ('date', '>=', rec.date_from),
+                ('date', '<=', rec.date_to),
+                ('company_id', '=', rec.company_id.id),
+            ])
+            
+            values_by_payment = {}
+            for pay in payments:
+                matched_invoices = pay.move_id._get_reconciled_invoices()
+                government_invoices = matched_invoices.filtered(self._has_government_sales_tag)
+                if not government_invoices or len(government_invoices) != len(matched_invoices):
+                    continue
+
+                vat_withheld = self._compute_vat_withheld_from_payment(pay)
+                if vat_withheld <= 0:
+                    continue
+
+                values_by_payment[pay.id] = {
+                    'bir_id': rec.id,
+                    'source_payment_id': pay.id,
+                    'period_covered': f"{rec._get_month_name()} {rec.year}",
+                    'withholding_agent': pay.partner_id.name,
+                    'income_payment': pay.amount,
+                    'total_tax_withheld': vat_withheld,
+                    'applied_current_mo': vat_withheld,
+                }
+
+            existing_lines = rec.sch8_ids.filtered('source_payment_id')
+            stale_lines = existing_lines.filtered(lambda line: line.source_payment_id.id not in values_by_payment)
+            if stale_lines:
+                raise UserError(
+                    "Schedule 8 has generated lines from payments outside the current period or eligibility rules. "
+                    "Review those lines before regenerating."
+                )
+
+            existing_by_payment = {line.source_payment_id.id: line for line in existing_lines}
+            for payment_id, values in values_by_payment.items():
+                existing = existing_by_payment.get(payment_id)
+                if existing:
+                    existing.write(values)
+                else:
+                    self.env['bir.2550m.sch8'].create(values)
+            
+            rec._sync_from_schedules()
+            
+            rec.message_post(
+                body=f"Schedule 8 synchronized from {len(values_by_payment)} government payment(s)."
+            )
+
+    @api.model
+    def _has_government_sales_tag(self, move):
+        return any(
+            '32A' in (tag.name or '').upper()
+            for line in move.invoice_line_ids
+            for tag in line.tax_tag_ids
+        )
+    
+    def action_generate_sch4(self):
+        """Auto-fill Schedule 4 from vatable sales to government."""
+        for rec in self:
+            if rec.state not in ('draft', 'generated'):
+                raise UserError("Only Draft or Generated returns can pull data.")
+
+
+            # 1. Compute taxable_sales_govt from Schedule 1
+            # Get all sales to government partners
+            AML = self.env['account.move.line']
+            
+            # Sales to government (from out_invoice with gov partner)
+            gov_sales = AML.search([
+                ('account_id.account_type', 'in', ['income', 'income_other']),
+                ('tax_tag_ids.name', 'ilike', '32A'),
+                ('date', '>=', rec.date_from),
+                ('date', '<=', rec.date_to),
+                ('move_id.state', '=', 'posted'),
+                ('move_id.move_type', 'in', ['out_invoice', 'out_refund']),
+                ('company_id', '=', rec.company_id.id),
+            ])
+            
+            taxable_sales_govt = sum(-line.balance for line in gov_sales)
+
+            # 2. Compute total_sales from Schedule 1
+            total_sales = sum(rec.sch1_ids.mapped('sales_amount'))
+
+            values = {
+                'taxable_sales_govt': taxable_sales_govt,
+                'total_sales': total_sales,
+            }
+            if len(rec.sch4_ids) > 1:
+                raise UserError("Schedule 4 has multiple rows; consolidate them before regenerating.")
+            if rec.sch4_ids:
+                rec.sch4_ids.write(values)
+            elif taxable_sales_govt or total_sales:
+                self.env['bir.2550m.sch4'].create({
+                    'bir_id': rec.id,
+                    **values,
+                })
+
+            rec.message_post(
+                body=f"Schedule 4 populated. Taxable Sales to Govt: ₱{taxable_sales_govt:,.2f}"
+            )
+    
+    def action_generate_sch5(self):
+        """Auto-fill Schedule 5 from exempt sales."""
+        for rec in self:
+            if rec.state not in ('draft', 'generated'):
+                raise UserError("Only Draft or Generated returns can pull data.")
+
+            AML = self.env['account.move.line']
+            
+            # 1. Compute taxable_exempt_sale from Schedule 1
+            exempt_sales = rec.sch1_ids.filtered(
+                lambda l: 'EXEMPT' in (l.industry or '').upper()
+            )
+            taxable_exempt_sale = sum(exempt_sales.mapped('sales_amount'))
+
+            # 2. total_sales from Schedule 1
+            total_sales = sum(rec.sch1_ids.mapped('sales_amount'))
+
+            values = {
+                'taxable_exempt_sale': taxable_exempt_sale,
+                'total_sales': total_sales,
+            }
+            if len(rec.sch5_ids) > 1:
+                raise UserError("Schedule 5 has multiple rows; consolidate them before regenerating.")
+            if rec.sch5_ids:
+                rec.sch5_ids.write(values)
+            elif taxable_exempt_sale or total_sales:
+                self.env['bir.2550m.sch5'].create({
+                    'bir_id': rec.id,
+                    **values,
+                })
+
+            rec.message_post(
+                body=f"Schedule 5 populated. Exempt Sales: ₱{taxable_exempt_sale:,.2f}"
             )
 
     # =====================================================
