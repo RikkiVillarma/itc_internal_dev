@@ -67,6 +67,9 @@ REPORT_NAMES = [
     ('form_1601e', 'Form 1601E'),
     ('form_1601eq', 'Form 1601EQ'),
     ('cash_flow_statement', 'Cash Flow Statement'),
+    ('generic_tax_report', 'Generic Tax Report'),
+    ('deferred_expense_report', 'Deferred Expense Report'),
+    ('partner_ledger', 'Partner Ledger'),
 ]
 
 # Categories for various reports, can be expanded as needed.
@@ -339,31 +342,107 @@ SQL_QUERIES = {
         where am."date" between %s and %s
         """,
         'purchase_journal': """
+            WITH params AS (
+                SELECT %s::date AS date_from, %s::date AS date_to
+            ),
+            bill_lines AS (
+                SELECT
+                    aml.move_id,
+                    ABS(aml.balance) AS net_amount,
+                    aa.account_type,
+                    aa.code_store->>am.company_id::text AS account_code,
+                    aa.name->>'en_US' AS account_title,
+                    pt.type AS product_type,
+                    COALESCE(
+                        aa.account_type IN ('asset_fixed', 'asset_non_current', 'non_current_assets')
+                        OR aa.code_store->>am.company_id::text IN ('1101', '1102', '1103', '1104', '1105'),
+                        FALSE
+                    ) AS is_capital,
+                    (rp.country_id = company_partner.country_id) AS is_domestic_service
+                FROM account_move_line aml
+                JOIN account_move am ON am.id = aml.move_id
+                JOIN account_account aa ON aa.id = aml.account_id
+                LEFT JOIN product_product pp ON pp.id = aml.product_id
+                LEFT JOIN product_template pt ON pt.id = pp.product_tmpl_id
+                LEFT JOIN res_partner rp ON rp.id = am.partner_id
+                JOIN res_company company ON company.id = am.company_id
+                JOIN res_partner company_partner ON company_partner.id = company.partner_id
+                WHERE am.move_type = 'in_invoice'
+                    AND am.state = 'posted'
+                    AND aml.tax_line_id IS NULL
+                    AND aml.product_id IS NOT NULL
+            ),
+            bill_classification AS (
+                SELECT
+                    move_id,
+                    SUM(net_amount) FILTER (WHERE is_capital) AS capital_goods_total,
+                    SUM(net_amount) FILTER (WHERE NOT is_capital AND product_type IS DISTINCT FROM 'service') AS other_goods,
+                    SUM(net_amount) FILTER (WHERE NOT is_capital AND product_type = 'service' AND is_domestic_service) AS domestic_services,
+                    STRING_AGG(DISTINCT account_title, ', ' ORDER BY account_title) AS account_title
+                FROM bill_lines
+                GROUP BY move_id
+            ),
+            expanded_withholding AS (
+                SELECT
+                    aml.move_id,
+                    STRING_AGG(DISTINCT COALESCE(
+                        NULLIF(SUBSTRING(tax.description->>'en_US' FROM 'W[CI]\\s*[0-9]+'), ''),
+                        SUBSTRING(tax.name->>'en_US' FROM 'W[CI]\\s*[0-9]+')
+                    ), ', ') FILTER (
+                        WHERE tax.type_tax_use = 'purchase' AND tax.amount < 0
+                    ) AS atc,
+                    STRING_AGG(DISTINCT ABS(tax.amount)::text || '%%', ', ') FILTER (
+                        WHERE tax.type_tax_use = 'purchase' AND tax.amount < 0
+                    ) AS rate,
+                    SUM(ABS(aml.balance)) FILTER (
+                        WHERE tax.type_tax_use = 'purchase' AND tax.amount < 0
+                    ) AS amount
+                FROM account_move_line aml
+                JOIN account_tax tax ON tax.id = aml.tax_line_id
+                GROUP BY aml.move_id
+            )
             SELECT
-                po.date_order AS "DATE",
-                po.name AS "PO NUMBER",
-                r.name AS "SUPPLIER",
-                r.contact_address_complete AS "ADDRESS",
-                r.vat AS "TIN",
-                po.partner_ref AS "SUPPLIER REFERENCE",
-                am.amount_untaxed AS "NET OF VAT",
-                am.amount_tax AS "INPUT TAX 12%%",
-                am.amount_total AS "GROSS AMOUNT",
-                am.name AS "BILL NUMBER",
-                am.invoice_date AS "BILL DATE",
-                am.payment_state AS "BILL STATUS",
-                pt.name->>'en_US' AS "PAYMENT TERMS"
-            FROM purchase_order po
-            INNER JOIN account_move am 
-                ON po.name = am.invoice_origin
-                AND am.move_type = 'in_invoice'
-                AND am.state = 'posted'
-                AND am.payment_state = 'paid'
-            LEFT JOIN res_partner r ON r.id = po.partner_id
-            LEFT JOIN account_payment_term pt ON pt.id = po.payment_term_id
-            WHERE po.state IN ('purchase', 'done')
-                AND po.date_order BETWEEN %s AND %s
-            ORDER BY po.date_order, po.name;
+                purchase_order.date_order::date AS "TRANSACTION DATE",
+                NULL AS "AP NUMBER",
+                'DV# ' || bill.name AS "DV NUMBER",
+                supplier.name AS "NAME OF PAYEE/SUPPLIER",
+                supplier.contact_address_complete AS "ADDRESS",
+                supplier.vat AS "TIN",
+                bill.invoice_date AS "REF DATE",
+                bill.ref AS "PRIMARY",
+                purchase_order.name AS "SUPPLEMENTARY",
+                bill.amount_untaxed + bill.amount_tax AS "GROSS AMOUNT",
+                bill.amount_tax AS "ACTUAL INPUT TAX 12%%",
+                ABS(bill.amount_untaxed_signed) AS "NET OF VAT",
+                CASE WHEN COALESCE(classification.capital_goods_total, 0) > 0
+                          AND classification.capital_goods_total <= 1000000
+                     THEN classification.capital_goods_total ELSE 0 END AS "CAPITAL GOODS (AGGREGATE NOT EXCEEDING 1M)",
+                CASE WHEN COALESCE(classification.capital_goods_total, 0) > 1000000
+                     THEN classification.capital_goods_total ELSE 0 END AS "CAPITAL GOODS (AGGREGATE EXCEEDING 1M)",
+                COALESCE(classification.other_goods, 0) AS "PURCHASE OTHER THAN CAPITAL GOODS",
+                COALESCE(classification.domestic_services, 0) AS "DOMESTIC PURCHASE OF SERVICES",
+                NULL AS "IMPORTATION PURCHASES",
+                NULL AS "PURCHASE NOT QUALIFIED TO INPUT TAX",
+                classification.account_title AS "ACCOUNT TITLE",
+                withholding.atc AS "EWT ATC",
+                withholding.rate AS "EWT RATE",
+                COALESCE(withholding.amount, 0) AS "EWT AMOUNT",
+                NULL AS "ALLOWED INPUT TAX",
+                NULL AS "DISALLOWED INPUT TAX",
+                NULL AS "DEFERRED INPUT TAX"
+            FROM account_move bill
+            JOIN res_partner supplier ON supplier.id = bill.partner_id
+            JOIN purchase_order purchase_order
+                ON purchase_order.name = bill.invoice_origin
+                AND purchase_order.state IN ('purchase', 'done')
+            LEFT JOIN bill_classification classification ON classification.move_id = bill.id
+            LEFT JOIN expanded_withholding withholding ON withholding.move_id = bill.id
+            CROSS JOIN params
+            WHERE bill.move_type = 'in_invoice'
+                AND bill.state = 'posted'
+                AND bill.payment_state = 'paid'
+                AND purchase_order.date_order BETWEEN params.date_from AND params.date_to
+            ORDER BY purchase_order.date_order, purchase_order.name, bill.name;
         """,
     'cash_receipt_journal': """
         SELECT
@@ -1597,6 +1676,29 @@ class SqlReport(models.Model):
         string="Trial Balance Journals",
         domain="[('company_id', 'in', allowed_company_ids)]",
     )
+    deferred_expense_journal_ids = fields.Many2many(
+        "account.journal",
+        "custom_sql_report_deferred_expense_journal_rel",
+        "report_id",
+        "journal_id",
+        string="Deferred Expense Journals",
+        domain="[('company_id', 'in', allowed_company_ids)]",
+    )
+    partner_ledger_journal_ids = fields.Many2many(
+        "account.journal",
+        "custom_sql_report_partner_ledger_journal_rel",
+        "report_id",
+        "journal_id",
+        string="Partner Ledger Journals",
+        domain="[('company_id', 'in', allowed_company_ids)]",
+    )
+    partner_ledger_partner_ids = fields.Many2many(
+        "res.partner",
+        "custom_sql_report_partner_ledger_partner_rel",
+        "report_id",
+        "partner_id",
+        string="Partners",
+    )
 
     sql_query = fields.Text("SQL Query")
     
@@ -1766,21 +1868,172 @@ class SqlReport(models.Model):
         options = report.get_options(previous_options)
         report_lines = report._get_lines(options)
         columns = [
-            'Account',
-            'Initial Debit',
-            'Initial Credit',
-            'Period Debit',
-            'Period Credit',
-            'Ending Debit',
-            'Ending Credit',
+            'Code',
+            'Account Title',
+            'Category',
+            'Normal',
+            'Beginning Balance Debit',
+            'Beginning Balance Credit',
+            'Balances for This Period Debit',
+            'Balances for This Period Credit',
+            'Trial Balances Debit',
+            'Trial Balances Credit',
         ]
         rows = []
         for line in report_lines:
             balance_columns = line.get('columns') or []
             balances = [column.get('no_format') or 0.0 for column in balance_columns]
             balances = (balances + [0.0] * 6)[:6]
+            model, record_id = report._get_model_info_from_id(line['id'])
+            if model == 'account.account' and record_id:
+                account = self.env['account.account'].browse(record_id)
+                account_type = account.account_type or ''
+                account_type_selection = dict(account._fields['account_type']._description_selection(self.env))
+                category = account_type_selection.get(account_type, account_type)
+                normal = 'Debit' if account.internal_group in ('asset', 'expense') else 'Credit'
+                if 'contra' in account_type:
+                    normal = 'Credit' if normal == 'Debit' else 'Debit'
+                code = account.code or ''
+                title = account.name or line.get('name', '')
+            else:
+                code = ''
+                title = line.get('name', '')
+                category = ''
+                normal = ''
+            title = f"{'  ' * line.get('level', 0)}{title}"
+            rows.append(tuple([code, title, category, normal, *balances]))
+        return columns, rows
+
+    def _get_generic_tax_report_rows(self):
+        self.ensure_one()
+        if not self.from_date or not self.to_date or self.from_date > self.to_date:
+            raise ValidationError("Select a valid Generic Tax Report date range.")
+
+        report = self.env.ref('account.generic_tax_report', raise_if_not_found=False)
+        if not report:
+            raise UserError("The Odoo Generic Tax Report is unavailable. Install the account_reports module.")
+
+        previous_options = {
+            'selected_variant_id': report.id,
+            'date': {
+                'date_from': fields.Date.to_string(self.from_date),
+                'date_to': fields.Date.to_string(self.to_date),
+                'mode': 'range',
+                'filter': 'custom',
+            },
+            'show_account': True,
+            'show_currency': True,
+        }
+        options = report.get_options(previous_options)
+        report_lines = report._get_lines(options)
+        report_columns = options.get('columns', [])
+        columns = ['Tax Report'] + [
+            column.get('name') or column.get('expression_label') or 'Amount'
+            for column in report_columns
+        ]
+
+        rows = []
+        for line in report_lines:
+            line_columns = line.get('columns') or []
+            amounts = [column.get('no_format') for column in line_columns]
+            amounts = (amounts + [None] * len(report_columns))[:len(report_columns)]
             label = f"{'  ' * line.get('level', 0)}{line.get('name', '')}"
-            rows.append(tuple([label, *balances]))
+            rows.append(tuple([label, *amounts]))
+        return columns, rows
+
+    def _get_deferred_expense_report_rows(self):
+        self.ensure_one()
+        if not self.from_date or not self.to_date or self.from_date > self.to_date:
+            raise ValidationError("Select a valid Deferred Expense Report date range.")
+
+        report = self.env.ref('account_reports.deferred_expense_report', raise_if_not_found=False)
+        if not report:
+            raise UserError("The Odoo Deferred Expense Report is unavailable. Install the account_reports module.")
+
+        previous_options = {
+            'selected_variant_id': report.id,
+            'date': {
+                'date_from': fields.Date.to_string(self.from_date),
+                'date_to': fields.Date.to_string(self.to_date),
+                'mode': 'range',
+                'filter': 'custom',
+            },
+            'show_account': True,
+            'show_currency': True,
+        }
+        journals = self.deferred_expense_journal_ids.filtered(
+            lambda journal: journal.company_id == self.env.company
+        )
+        if journals:
+            previous_options['journals'] = [
+                {'id': journal.id, 'model': 'account.journal', 'selected': True}
+                for journal in journals
+            ]
+
+        options = report.get_options(previous_options)
+        report_lines = report._get_lines(options)
+        report_columns = options.get('columns', [])
+        columns = ['Deferred Expense'] + [
+            column.get('name') or column.get('expression_label') or 'Amount'
+            for column in report_columns
+        ]
+
+        rows = []
+        for line in report_lines:
+            line_columns = line.get('columns') or []
+            amounts = [column.get('no_format') for column in line_columns]
+            amounts = (amounts + [None] * len(report_columns))[:len(report_columns)]
+            label = f"{'  ' * line.get('level', 0)}{line.get('name', '')}"
+            rows.append(tuple([label, *amounts]))
+        return columns, rows
+
+    def _get_partner_ledger_rows(self):
+        self.ensure_one()
+        if not self.from_date or not self.to_date or self.from_date > self.to_date:
+            raise ValidationError("Select a valid Partner Ledger date range.")
+
+        report = self.env.ref('account_reports.partner_ledger_report', raise_if_not_found=False)
+        if not report:
+            raise UserError("The Odoo Partner Ledger report is unavailable. Install the account_reports module.")
+
+        previous_options = {
+            'selected_variant_id': report.id,
+            'date': {
+                'date_from': fields.Date.to_string(self.from_date),
+                'date_to': fields.Date.to_string(self.to_date),
+                'mode': 'range',
+                'filter': 'custom',
+            },
+            'show_account': True,
+            'show_currency': True,
+            'partner_ids': self.partner_ledger_partner_ids.ids,
+        }
+        journals = self.partner_ledger_journal_ids.filtered(
+            lambda journal: journal.company_id == self.env.company
+        )
+        if journals:
+            previous_options['journals'] = [
+                {'id': journal.id, 'model': 'account.journal', 'selected': True}
+                for journal in journals
+            ]
+
+        options = report.get_options(previous_options)
+        options['unfold_all'] = True
+        options['export_mode'] = 'print'
+        report_lines = report._get_lines(options)
+        report_columns = options.get('columns', [])
+        columns = ['Partner / Journal Item'] + [
+            column.get('name') or column.get('expression_label') or 'Amount'
+            for column in report_columns
+        ]
+
+        rows = []
+        for line in report_lines:
+            line_columns = line.get('columns') or []
+            amounts = [column.get('no_format') for column in line_columns]
+            amounts = (amounts + [None] * len(report_columns))[:len(report_columns)]
+            label = f"{'  ' * line.get('level', 0)}{line.get('name', '')}"
+            rows.append(tuple([label, *amounts]))
         return columns, rows
 
     def _is_summary_total_row(self, row, columns):
@@ -1788,7 +2041,8 @@ class SqlReport(models.Model):
             return False
         label = str(row.get(columns[0], '')).strip()
         if self.name == 'trial_balance':
-            return label.lower() == 'total'
+            title = str(row.get('Account Title', '')).strip()
+            return label.lower() == 'total' or title.lower() == 'total'
         if self.name == 'cash_flow_statement':
             return label in {
                 'Cash and cash equivalents, beginning of period',
@@ -1799,6 +2053,12 @@ class SqlReport(models.Model):
                 'Cash flows from unclassified activities',
                 'Cash and cash equivalents, closing balance',
             }
+        if self.name == 'generic_tax_report':
+            return label in ('Sales', 'Purchases') or label.startswith('Total ')
+        if self.name == 'deferred_expense_report':
+            return label.lower() == 'total'
+        if self.name == 'partner_ledger':
+            return label == 'Total' or label.startswith('Total ')
         return False
 
     """ Generate Report Action"""
@@ -1813,6 +2073,12 @@ class SqlReport(models.Model):
                 columns, rows = self._get_cash_flow_statement_rows()
             elif self.name == 'trial_balance':
                 columns, rows = self._get_trial_balance_rows()
+            elif self.name == 'generic_tax_report':
+                columns, rows = self._get_generic_tax_report_rows()
+            elif self.name == 'deferred_expense_report':
+                columns, rows = self._get_deferred_expense_report_rows()
+            elif self.name == 'partner_ledger':
+                columns, rows = self._get_partner_ledger_rows()
             else:
                 sql = SQL_QUERIES.get(self.name)
                 if not sql:
@@ -1826,9 +2092,7 @@ class SqlReport(models.Model):
 
             for row in rows:
                 row_dict, cells = {}, []
-                is_summary_total = self._is_summary_total_row(
-                    {columns[0]: row[0]} if columns and row else {}, columns
-                )
+                is_summary_total = self._is_summary_total_row(dict(zip(columns, row)), columns)
                 for col, val in zip(columns, row):
                     if isinstance(val, bool):
                         # bool is a subclass of int — must be checked first,
@@ -1842,7 +2106,10 @@ class SqlReport(models.Model):
                         val = formatted_val
                     row_dict[col] = val
                     align = "right" if isinstance(val, str) and val.replace(",", "").replace(".", "").isdigit() else "left"
-                    whitespace = "white-space:pre;" if self.name == 'trial_balance' and col == columns[0] else ""
+                    whitespace = "white-space:pre;" if (
+                        self.name == 'trial_balance' and col == 'Account Title'
+                        or self.name in ('generic_tax_report', 'deferred_expense_report', 'partner_ledger') and col == columns[0]
+                    ) else ""
                     weight = "font-weight:bold;" if is_summary_total else ""
                     cells.append(f"<td style='min-width:150px; text-align:{align}; {whitespace} {weight}'>{val or ''}</td>")
                 serializable_rows.append(row_dict)
@@ -1863,7 +2130,7 @@ class SqlReport(models.Model):
                     total_cells.append("<td></td>")
 
             total_footer_html = ""
-            if self.name not in ('cash_flow_statement', 'trial_balance'):
+            if self.name not in ('cash_flow_statement', 'trial_balance', 'generic_tax_report', 'deferred_expense_report', 'partner_ledger'):
                 total_footer_html = f"""
                     <tfoot style="position: sticky; bottom: 0; background-color: #f0f0f0; z-index: 2; font-weight: bold;">
                         <tr>{''.join(total_cells)}</tr>
@@ -2008,7 +2275,7 @@ class SqlReport(models.Model):
                         worksheet.write(row_idx, col_idx, val, row_text_format)
 
 
-        if self.name not in ('cash_flow_statement', 'trial_balance'):
+        if self.name not in ('cash_flow_statement', 'trial_balance', 'generic_tax_report', 'deferred_expense_report', 'partner_ledger'):
             total_row_idx = start_row + 1 + len(rows)
             for col_idx, col_name in enumerate(columns):
                 total_val = totals.get(col_name)
