@@ -22,6 +22,11 @@ class AccountMove(models.Model):
 
     x_payee_ref = fields.Char(string="Payee Reference", tracking=True)
 
+    x_journal_type = fields.Selection(
+        related='journal_id.type',
+        string='Journal Type',
+    )
+
     # -------------------------------------------------------------------------
     # OVERRIDES
     # -------------------------------------------------------------------------

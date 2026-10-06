@@ -1,249 +1,355 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-  <!-- QWeb Template: Collection Receipt (shared layout; title is set by receipt_title) -->
+  <!--
+    Shared receipt layout (Collection Receipt / Official Receipt).
+    Title comes from `receipt_title`. Layout follows the Etaxpoint OR format:
+    Header > Title > OR No/BR/Date > Customer > Reference Details (2-column)
+    > Collection Details + Mode of Payment > Amount in Words > Payment Details
+    > Account Titles > Signatures > BIR footer
+  -->
   <template id="report_custom_official_receipt_template">
     <t t-call="web.basic_layout">
       <t t-foreach="docs" t-as="doc">
-        <div class="page" style="font-family: Arial, sans-serif; font-size: 14px; line-height:1.4;">
-          <main>
 
-          <!-- CUSTOM COMPANY HEADER -->
-          <div style="text-align:center; margin-bottom:15px;">
-            <p style="font-size:20px; font-weight:bold; margin:0;">
-              <t t-esc="doc.company_id.name"/>
-            </p>
-            <p style="font-size:16px; margin:2px 0 0 0;">
-              Lot 1A Colours Town Center Alabang Zapote Road corner Marcos Alvarez Avenue
-            </p>
-            <p style="font-size:16px; margin:0;">
-              Talon Uno 1740 City of Las Pinas NCR Fourth District Philippines.
-            </p>
-            <p style="font-size:16px; margin:2px 0 0 0;">
-              VAT REG TIN: <t t-esc="doc.company_id.vat or ''"/>
-            </p>
-            <p style="font-size:16px; margin:2px 0 0 0;">
-              Telephone No.:8840-4821 <t t-esc="doc.company_id.phone or ''"/>
-            </p>
-          </div>
-            <!-- Receipt Header -->
-            <table style="width:100%; margin-bottom:15px; font-size:13px; border-collapse:collapse;">
+        <!-- ================= CONFIG (edit these) ================= -->
+        <t t-set="branch_code" t-value="'BR-00000-MAIN'"/>
+        <t t-set="system_name" t-value="'Odoo 18 (Tax Based Accounting System)'"/>
+        <t t-set="ack_cert_no" t-value="''"/>
+        <t t-set="ack_cert_date" t-value="''"/>
+        <t t-set="series_range" t-value="'OR-000000000001 - OR-999999999999'"/>
+        <t t-set="fmt" t-value="{'widget': 'float', 'precision': 2}"/>
+
+        <!-- ================= COMPUTATIONS ================= -->
+        <t t-set="invoices" t-value="doc.reconciled_invoice_ids"/>
+        <t t-set="gross" t-value="sum(invoices.mapped('amount_total'))"/>
+        <!-- EWT (2307) booked on the invoices OR on the payment's own journal entry -->
+        <t t-set="ewt_inv" t-value="sum(abs(l.balance) for l in invoices.line_ids if '2307' in (l.account_id.name or ''))"/>
+        <t t-set="ewt_pay" t-value="sum(abs(l.balance) for l in doc.move_id.line_ids if '2307' in (l.account_id.name or ''))"/>
+        <t t-set="ewt_total" t-value="round(ewt_inv + ewt_pay, 2)"/>
+        <t t-set="net_due" t-value="round(gross - ewt_total, 2)"/>
+        <!-- Balancing figures so Collection Details always ties to the payment amount -->
+        <t t-set="other_ded" t-value="round(max(net_due - doc.amount, 0.0), 2)"/>
+        <t t-set="deposit" t-value="round(max(doc.amount - net_due, 0.0), 2)"/>
+
+        <!-- Mode of payment -->
+        <t t-set="pm_name" t-value="(doc.payment_method_line_id.name or '').lower()"/>
+        <t t-set="is_cash" t-value="doc.journal_id.type == 'cash'"/>
+        <t t-set="is_check" t-value="not is_cash and ('check' in pm_name or 'cheque' in pm_name)"/>
+        <t t-set="is_other" t-value="not is_cash and not is_check"/>
+
+        <!-- Check details (no standard inbound check fields in Odoo; swap if you add custom ones) -->
+        <t t-set="chk_bank" t-value="doc.journal_id.name"/>
+        <t t-set="chk_date" t-value="doc.date"/>
+        <t t-set="chk_no" t-value="doc.memo or ''"/>
+
+        <!-- Amount in words: "... Philippine Pesos and 29/100" -->
+        <t t-set="cents_total" t-value="int(round(doc.amount * 100))"/>
+        <t t-set="whole" t-value="cents_total // 100"/>
+        <t t-set="cents" t-value="cents_total % 100"/>
+        <t t-set="unit_label" t-value="doc.currency_id.currency_unit_label or ''"/>
+        <t t-set="words" t-value="doc.currency_id.amount_to_text(whole)"/>
+        <t t-set="words" t-value="words[:-len(unit_label)].strip() if unit_label and words.endswith(unit_label) else words"/>
+
+        <!-- Reference details: 2 invoices per row, minimum 3 rows -->
+        <t t-set="ref_rows" t-value="max((len(invoices) + 1) // 2, 3)"/>
+
+        <div class="page">
+          <style>
+            .or-wrap { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.35; color: #000; }
+            .or-tbl { width: 100%; border-collapse: collapse; }
+            .or-tbl td, .or-tbl th { border: 1px solid #000; padding: 3px 5px; }
+            .or-tbl th { background: #d9d9d9; font-weight: bold; text-align: center; }
+            .or-tbl tr { height: 18px; }
+            .or-plain { width: 100%; border-collapse: collapse; }
+            .or-plain td { border: none; padding: 2px 0; vertical-align: top; }
+            .or-r { text-align: right; }
+            .or-c { text-align: center; }
+            .or-tot td { background: #e6e6e6; font-weight: bold; }
+            .or-gap { height: 10px; }
+            .or-small { font-size: 10px; }
+          </style>
+
+          <div class="or-wrap">
+
+            <!-- ===== COMPANY HEADER ===== -->
+            <div class="or-c" style="margin-bottom: 10px;">
+              <div style="font-size: 18px; font-weight: bold; text-transform: uppercase;">
+                <t t-esc="doc.company_id.name"/>
+              </div>
+              <div>Lot 1A Colours Town Center Alabang Zapote Road corner Marcos Alvarez Avenue</div>
+              <div>Talon Uno 1740 City of Las Pinas NCR Fourth District Philippines</div>
+              <div>VAT REG TIN: <t t-esc="doc.company_id.vat or ''"/></div>
+              <div>Telephone No.: <t t-esc="doc.company_id.phone or '8840-4821'"/></div>
+            </div>
+
+            <!-- ===== TITLE ===== -->
+            <div class="or-c" style="font-size: 16px; font-weight: bold; margin-bottom: 6px;">
+              <t t-esc="receipt_title or 'COLLECTION RECEIPT'"/>
+            </div>
+
+            <!-- ===== OR NO / BRANCH / DATE ===== -->
+            <table class="or-plain" style="margin-bottom: 6px;">
               <tr>
-                <td style="width:60%; vertical-align:top; padding:5px; border:1px solid black;">
-                  <strong style="font-size:18px;"><t t-esc="receipt_title or 'COLLECTION RECEIPT'"/></strong><br/>
-                  <strong>OR NO.:</strong> <span t-field="doc.name"/><br/>
-                  <strong>BR:</strong> BR-00000-MAIN
-                </td>
-                <td style="width:40%; vertical-align:bottom; padding:5px; text-align:right; border:1px solid black;">
-                  <strong>OR Date:</strong> <span t-field="doc.date" t-options='{"format": "MMMM dd, yyyy"}'/><br/>
+                <td style="width: 40%;"><strong>OR NO.:</strong> <span t-field="doc.name"/></td>
+                <td style="width: 25%;" class="or-c"><strong t-esc="branch_code"/></td>
+                <td style="width: 35%;" class="or-r">
+                  <strong>OR Date</strong> <span t-field="doc.date" t-options='{"format": "MMMM dd, yyyy"}'/>
                 </td>
               </tr>
             </table>
-            <!-- CUSTOMER -->
-          <table style="width:100%; border:1px solid black; border-collapse:collapse;">
-            <tr>
-              <td style="border:1px solid black; padding:4px; width:20%;">Received From:</td>
-              <td style="border:1px solid black; padding:4px;" colspan="3">
-                <span t-field="doc.partner_id.name"/>
-              </td>
-            </tr>
-            <tr>
-              <td style="border:1px solid black; padding:4px;">Address:</td>
-              <td style="border:1px solid black; padding:4px;" colspan="3">
-                <span t-field="doc.partner_id.contact_address_complete"/>
-              </td>
-            </tr>
-            <tr>
-              <td style="border:1px solid black; padding:4px;">TIN:</td>
-              <td style="border:1px solid black; padding:4px;" colspan="3">
-                <span t-field="doc.partner_id.vat"/>
-              </td>
-            </tr>
-          </table>
 
-          <br/>
-
-          <!-- REFERENCE DETAILS -->
-          <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:11px;">
-            <thead>
+            <!-- ===== CUSTOMER ===== -->
+            <table class="or-tbl">
               <tr>
-                <th colspan="5" style="border:1px solid black; background:#d9d9d9; padding:4px;">
-                  REFERENCE DETAILS
-                </th>
+                <td style="width: 18%;"><strong>Received From:</strong></td>
+                <td><span t-field="doc.partner_id.name"/></td>
               </tr>
               <tr>
-                <th style="border:1px solid black; background:#d9d9d9;">Reference Date</th>
-                <th style="border:1px solid black; background:#d9d9d9;">Reference Number</th>
-                <th style="border:1px solid black; background:#d9d9d9;">Reference Amount</th>
-                <th style="border:1px solid black; background:#d9d9d9;">CWT</th>
-                <th style="border:1px solid black; background:#d9d9d9;">Net Amount</th>
+                <td><strong>Address:</strong></td>
+                <td><span t-field="doc.partner_id.contact_address_complete"/></td>
               </tr>
-            </thead>
+              <tr>
+                <td><strong>TIN:</strong></td>
+                <td><span t-esc="doc.partner_id.vat or ''"/></td>
+              </tr>
+            </table>
 
-            <tbody>
-              <t t-set="gross" t-value="0"/>
-              <t t-set="ewt_total" t-value="0"/>
+            <div class="or-gap"/>
 
-              <t t-foreach="doc.reconciled_invoice_ids" t-as="inv">
-                <t t-set="gross" t-value="gross + inv.amount_total"/>
-                <t t-set="ewt" t-value="sum(l.balance for l in inv.line_ids if '2307' in (l.account_id.name or ''))"/>
-                <t t-set="ewt_total" t-value="ewt_total + abs(ewt)"/>
-
-                <tr style="height:18px;">
-                  <td style="border:1px solid black; padding:3px;"><span t-field="inv.invoice_date"/></td>
-                  <td style="border:1px solid black; padding:3px;"><span t-field="inv.name"/></td>
-
-                  <td style="border:1px solid black; padding:3px; text-align:right;">
-                    <span t-field="inv.amount_total" t-options='{"widget":"monetary","display_currency":doc.currency_id}'/>
-                  </td>
-
-                  <td style="border:1px solid black; padding:3px; text-align:right;">
-                    <span t-esc="abs(ewt)"/>
-                  </td>
-
-                  <td style="border:1px solid black; padding:3px; text-align:right;">
-                    <span t-esc="inv.amount_total - abs(ewt)"/>
-                  </td>
+            <!-- ===== REFERENCE DETAILS (2 per row) ===== -->
+            <table class="or-tbl">
+              <thead>
+                <tr><th colspan="4">REFERENCE DETAILS</th></tr>
+                <tr>
+                  <th style="width: 30%;">Reference Number</th>
+                  <th style="width: 20%;">Amount</th>
+                  <th style="width: 30%;">Reference Number</th>
+                  <th style="width: 20%;">Amount</th>
                 </tr>
-              </t>
-
-              <!-- EMPTY ROWS -->
-              <t t-foreach="range(6)" t-as="i">
-                <tr style="height:18px;">
-                  <td style="border:1px solid black;"></td>
-                  <td style="border:1px solid black;"></td>
-                  <td style="border:1px solid black;"></td>
-                  <td style="border:1px solid black;"></td>
-                  <td style="border:1px solid black;"></td>
+              </thead>
+              <tbody>
+                <t t-foreach="range(ref_rows)" t-as="r">
+                  <t t-set="left" t-value="invoices[2 * r] if 2 * r &lt; len(invoices) else False"/>
+                  <t t-set="right" t-value="invoices[2 * r + 1] if 2 * r + 1 &lt; len(invoices) else False"/>
+                  <tr>
+                    <td><t t-if="left" t-esc="left.name"/></td>
+                    <td class="or-r"><t t-if="left" t-esc="left.amount_total" t-options="fmt"/></td>
+                    <td><t t-if="right" t-esc="right.name"/></td>
+                    <td class="or-r"><t t-if="right" t-esc="right.amount_total" t-options="fmt"/></td>
+                  </tr>
+                </t>
+              </tbody>
+              <tfoot>
+                <tr class="or-tot">
+                  <td colspan="3">TOTAL</td>
+                  <td class="or-r"><t t-esc="gross" t-options="fmt"/></td>
                 </tr>
-              </t>
-            </tbody>
+              </tfoot>
+            </table>
 
-            <tfoot>
-              <tr style="background:#e6e6e6; font-weight:bold;">
-                <td colspan="2" style="border:1px solid black; padding:4px;">TOTAL</td>
-                <td style="border:1px solid black; text-align:right;"><span t-esc="gross"/></td>
-                <td style="border:1px solid black; text-align:right;"><span t-esc="ewt_total"/></td>
-                <td style="border:1px solid black; text-align:right;"><span t-esc="gross - ewt_total"/></td>
-              </tr>
-            </tfoot>
-          </table>
+            <div class="or-gap"/>
 
-          <br/>
-
-          <!-- AMOUNT IN WORDS -->
-          <p>
-            <strong>Amount in Words:</strong>
-            ***<span t-esc="doc.currency_id.amount_to_text(doc.amount)"/> ONLY***
-          </p>
-
-          <!-- PAYMENT DETAILS -->
-          <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:11px;">
-            <thead>
+            <!-- ===== COLLECTION DETAILS + MODE OF PAYMENT (side by side) ===== -->
+            <table class="or-plain">
               <tr>
-                <th colspan="4" style="border:1px solid black; background:#d9d9d9;">PAYMENT DETAILS</th>
-              </tr>
-              <tr>
-                <th style="border:1px solid black; background:#d9d9d9;">BANK NAME</th>
-                <th style="border:1px solid black; background:#d9d9d9;">CHECK DATE</th>
-                <th style="border:1px solid black; background:#d9d9d9;">CHECK NUMBER</th>
-                <th style="border:1px solid black; background:#d9d9d9;">CHECK AMOUNT</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr style="height:18px;">
-                <td style="border:1px solid black;"></td>
-                <td style="border:1px solid black;"></td>
-                <td style="border:1px solid black;"></td>
-                <td style="border:1px solid black;"></td>
-              </tr>
-
-              <tr>
-                <td colspan="3" style="border:1px solid black;">Total</td>
-                <td style="border:1px solid black; text-align:right;">0.00</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <br/>
-
-          <!-- ACCOUNT TITLE -->
-          <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:11px;">
-            <thead>
-              <tr>
-                <th style="border:1px solid black; background:#d9d9d9;">ACCOUNT TITLE</th>
-                <th style="border:1px solid black; background:#d9d9d9;">DEBIT</th>
-                <th style="border:1px solid black; background:#d9d9d9;">CREDIT</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr>
-                <td style="border:1px solid black; padding:4px;">Cash on Hand</td>
-                <td style="border:1px solid black; text-align:right;">
-                  <span t-field="doc.amount"/>
+                <td style="width: 55%; padding-right: 8px;">
+                  <table class="or-tbl">
+                    <thead>
+                      <tr><th colspan="2">COLLECTION DETAILS</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Amount For Collection</td>
+                        <td class="or-r" style="width: 35%;"><t t-esc="gross" t-options="fmt"/></td>
+                      </tr>
+                      <tr>
+                        <td>Less: 2307 - EWT</td>
+                        <td class="or-r"><t t-esc="ewt_total" t-options="fmt"/></td>
+                      </tr>
+                      <tr>
+                        <td>Less: Other Deductions</td>
+                        <td class="or-r"><t t-esc="other_ded" t-options="fmt"/></td>
+                      </tr>
+                      <tr>
+                        <td>Add: Customer Deposit</td>
+                        <td class="or-r"><t t-esc="deposit" t-options="fmt"/></td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr class="or-tot">
+                        <td>Total</td>
+                        <td class="or-r"><t t-esc="doc.amount" t-options="fmt"/></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </td>
-                <td style="border:1px solid black;"></td>
-              </tr>
-
-              <tr>
-                <td style="border:1px solid black; padding:4px;">
-                  Creditable Tax Withheld At Source - Receivable (2307)
-                </td>
-                <td style="border:1px solid black; text-align:right;">
-                  <span t-esc="ewt_total"/>
-                </td>
-                <td style="border:1px solid black;"></td>
-              </tr>
-
-              <tr>
-                <td style="border:1px solid black; padding:4px;">Accounts Receivable</td>
-                <td style="border:1px solid black;"></td>
-                <td style="border:1px solid black; text-align:right;">
-                  <span t-esc="gross"/>
+                <td style="width: 45%;">
+                  <table class="or-tbl">
+                    <thead>
+                      <tr><th colspan="2">MODE OF PAYMENT</th></tr>
+                      <tr>
+                        <th>Description</th>
+                        <th style="width: 40%;">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Cash</td>
+                        <td class="or-r"><t t-esc="doc.amount if is_cash else 0.0" t-options="fmt"/></td>
+                      </tr>
+                      <tr>
+                        <td>Check</td>
+                        <td class="or-r"><t t-esc="doc.amount if is_check else 0.0" t-options="fmt"/></td>
+                      </tr>
+                      <tr>
+                        <td>Others</td>
+                        <td class="or-r"><t t-esc="doc.amount if is_other else 0.0" t-options="fmt"/></td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr class="or-tot">
+                        <td>Total</td>
+                        <td class="or-r"><t t-esc="doc.amount" t-options="fmt"/></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </td>
               </tr>
-            </tbody>
+            </table>
 
-            <tfoot>
-              <tr style="background:#e6e6e6; font-weight:bold;">
-                <td style="border:1px solid black;">Total</td>
-                <td style="border:1px solid black; text-align:right;"><span t-esc="gross"/></td>
-                <td style="border:1px solid black; text-align:right;"><span t-esc="gross"/></td>
+            <div class="or-gap"/>
+
+            <!-- ===== AMOUNT IN WORDS ===== -->
+            <p style="margin: 0 0 8px 0;">
+              <strong>Amount in Words:</strong>
+              ***<t t-esc="words"/> Philippine Pesos and <t t-esc="'%02d' % cents"/>/100 ONLY***
+            </p>
+
+            <!-- ===== PAYMENT DETAILS ===== -->
+            <table class="or-tbl">
+              <thead>
+                <tr><th colspan="4">PAYMENT DETAILS</th></tr>
+                <tr>
+                  <th>BANK NAME</th>
+                  <th>CHECK DATE</th>
+                  <th>CHECK NUMBER</th>
+                  <th>CHECK AMOUNT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><t t-if="is_check" t-esc="chk_bank"/></td>
+                  <td class="or-c">
+                    <t t-if="is_check and chk_date" t-esc="chk_date" t-options='{"widget": "date", "format": "MM/dd/yyyy"}'/>
+                  </td>
+                  <td class="or-c"><t t-if="is_check" t-esc="chk_no"/></td>
+                  <td class="or-r"><t t-if="is_check" t-esc="doc.amount" t-options="fmt"/></td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="or-tot">
+                  <td colspan="3">Total</td>
+                  <td class="or-r"><t t-esc="doc.amount if is_check else 0.0" t-options="fmt"/></td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <div class="or-gap"/>
+
+            <!-- ===== ACCOUNT TITLES ===== -->
+            <t t-set="debit_total" t-value="doc.amount + ewt_total + other_ded"/>
+            <t t-set="credit_total" t-value="gross + deposit"/>
+            <table class="or-tbl">
+              <thead>
+                <tr>
+                  <th style="width: 60%;">ACCOUNT TITLE</th>
+                  <th style="width: 20%;">DEBIT</th>
+                  <th style="width: 20%;">CREDIT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <t t-if="is_cash">Cash on Hand</t>
+                    <t t-elif="is_check">Cash (Check Collection)</t>
+                    <t t-else="" t-esc="doc.journal_id.name"/>
+                  </td>
+                  <td class="or-r"><t t-esc="doc.amount" t-options="fmt"/></td>
+                  <td/>
+                </tr>
+                <tr t-if="ewt_total">
+                  <td>Creditable Tax Withheld At Source - Receivable (2307)</td>
+                  <td class="or-r"><t t-esc="ewt_total" t-options="fmt"/></td>
+                  <td/>
+                </tr>
+                <tr t-if="other_ded">
+                  <td>Other Deductions</td>
+                  <td class="or-r"><t t-esc="other_ded" t-options="fmt"/></td>
+                  <td/>
+                </tr>
+                <tr t-if="gross">
+                  <td>Accounts Receivable</td>
+                  <td/>
+                  <td class="or-r"><t t-esc="gross" t-options="fmt"/></td>
+                </tr>
+                <tr t-if="deposit">
+                  <td>Customer Deposit</td>
+                  <td/>
+                  <td class="or-r"><t t-esc="deposit" t-options="fmt"/></td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="or-tot">
+                  <td>Total</td>
+                  <td class="or-r"><t t-esc="debit_total" t-options="fmt"/></td>
+                  <td class="or-r"><t t-esc="credit_total" t-options="fmt"/></td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <!-- ===== SIGNATURES (side by side) ===== -->
+            <table class="or-plain" style="margin-top: 45px;">
+              <tr>
+                <td style="width: 38%; border-top: 1.5px solid #000;" class="or-c">
+                  <strong>Cashier/Collector's Signature</strong>
+                </td>
+                <td style="width: 24%;"/>
+                <td style="width: 38%; border-top: 1.5px solid #000;" class="or-c">
+                  <strong>Customer's Signature</strong>
+                </td>
               </tr>
-            </tfoot>
-          </table>
+            </table>
 
-          <br/><br/>
+            <!-- ===== CAS INFO ===== -->
+            <div style="margin-top: 18px;">
+              <div>Printed By : <t t-esc="system_name"/></div>
+              <div>Acknowledgment Certificate No.: <t t-esc="ack_cert_no"/></div>
+              <div>Acknowledgment Certificate Date Issued: <t t-esc="ack_cert_date"/></div>
+              <div>Permitted Series Range: <t t-esc="series_range"/></div>
+            </div>
 
-          <!-- SIGNATURE -->
-          <table style="width:100%; text-align:center;">
-            <tr>
-              <td>
-                ___________________________<br/>
-                Cashier/Collector's Signature
-              </td>
-              <td>
-                ___________________________<br/>
-                Customer's Signature
-              </td>
-            </tr>
-          </table>
-
-          <br/>
-
-          <!-- FOOTER -->
-          <p style="text-align:center; font-size:10px;">
-            THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX
-          </p>
-
-          </main>
+          </div>
         </div>
       </t>
+
+      <!-- ===== PAGE FOOTER (rendered by wkhtmltopdf on every page) ===== -->
+      <div class="footer" style="font-family: Arial, sans-serif; font-size: 12px;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="width: 20%;"/>
+            <td style="width: 60%; text-align: center; font-weight: bold;">
+              THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX
+            </td>
+            <td style="width: 20%; text-align: right; font-style: italic; font-size: 11px;">
+              Page <span class="page"/> of <span class="topage"/>
+            </td>
+          </tr>
+        </table>
+      </div>
     </t>
   </template>
 
-  <!-- QWeb Template: Official Receipt (same layout, different title) -->
+  <!-- Official Receipt: same layout, different title -->
   <template id="report_official_receipt_template">
     <t t-call="itc_internal_dev.report_custom_official_receipt_template">
       <t t-set="receipt_title" t-value="'OFFICIAL RECEIPT'"/>

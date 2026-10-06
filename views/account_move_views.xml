@@ -47,7 +47,7 @@
                             string="Print Disbursement Voucher"
                             type="action"
                             class="oe_highlight"
-                            invisible="state != 'posted'"/>
+                            invisible="state != 'posted' or move_type in ('out_invoice', 'out_refund')"/>
                     
                 </xpath>
 
@@ -58,7 +58,7 @@
                         <field name="x_partner_tin" invisible="not partner_id"/>
                     </group>
                 </xpath>
-                <xpath expr="//group[@id='header_left_group']//field[@name='ref']" position="after">
+                <xpath expr="(//group[@id='header_left_group']//field[@name='ref'])[last()]" position="after">
                     <field name="x_payee_ref"/>
                 </xpath>
 
