@@ -66,6 +66,26 @@
                         <group>
                             <field name="from_date" invisible="filter_by_year == True"/>
                             <field name="to_date" invisible="filter_by_year == True"/>
+                            <field name="cash_flow_journal_ids"
+                                widget="many2many_tags"
+                                invisible="name != 'cash_flow_statement'"
+                                options="{'no_create': True, 'no_open': True}"/>
+                            <field name="trial_balance_journal_ids"
+                                widget="many2many_tags"
+                                invisible="name != 'trial_balance'"
+                                options="{'no_create': True, 'no_open': True}"/>
+                            <field name="deferred_expense_journal_ids"
+                                widget="many2many_tags"
+                                invisible="name != 'deferred_expense_report'"
+                                options="{'no_create': True, 'no_open': True}"/>
+                            <field name="partner_ledger_journal_ids"
+                                widget="many2many_tags"
+                                invisible="name != 'partner_ledger'"
+                                options="{'no_create': True, 'no_open': True}"/>
+                            <field name="partner_ledger_partner_ids"
+                                widget="many2many_tags"
+                                invisible="name != 'partner_ledger'"
+                                options="{'no_create': True, 'no_open': True}"/>
                         </group>
 
                     </group>
