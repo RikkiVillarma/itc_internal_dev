@@ -2,13 +2,13 @@
 <odoo>
 
   <!-- ================= SHARED BODY ================= -->
-  <!-- Expects: company, partner, voucher_no, voucher_date, amount, amount_words, particulars, move -->
+  <!-- Expects: company, partner, payee_ref, voucher_no, voucher_date, amount, amount_words, particulars, move -->
   <template id="disbursement_voucher_body">
     <div class="page" style="font-family: Arial; font-size:16pt; padding:30px;">
       <div style="width:100%; margin-bottom:30px;">
         <div style="display:inline-block; width:60%; vertical-align:top;">
           <strong><t t-esc="company.name"/></strong><br/>
-          <span>Philam Life Village Park, 4th Floor Vista Mall I.T. HUB Alabang-Zapote Road Cor. C.V Starr Avenue</span><br/>
+          <span>Lot 1A Colours Town Center Alabang Zapote Road corner Marcos Alvarez Avenue Talon Uno 1740 City of Las Pinas NCR Fourth District Philippines</span><br/>
           <span>VAT REG TIN: <t t-esc="company.vat"/></span><br/>
           <span>Telephone No. 380-3000</span>
         </div>
@@ -22,7 +22,7 @@
       <table style="width:100%; border:1px solid black; border-collapse:collapse;">
         <tr>
           <td style="width:50%; border:1px solid black; padding:5px;">
-            <strong>SUPPLIER / PAYEE: </strong><br/>
+            <strong>SUPPLIER / PAYEE: </strong><t t-esc="payee_ref or ''"/><br/>
             <hr/>
             <t t-esc="partner.name if partner else ''"/>
           </td>
@@ -115,6 +115,7 @@
         <t t-call="itc_internal_dev.disbursement_voucher_body">
           <t t-set="company" t-value="doc.company_id"/>
           <t t-set="partner" t-value="doc.partner_id"/>
+          <t t-set="payee_ref" t-value="doc.move_id.x_payee_ref"/>
           <t t-set="voucher_no" t-value="doc.name"/>
           <t t-set="voucher_date" t-value="doc.date"/>
           <t t-set="amount" t-value="doc.amount"/>
@@ -136,6 +137,7 @@
         <t t-call="itc_internal_dev.disbursement_voucher_body">
           <t t-set="company" t-value="doc.company_id"/>
           <t t-set="partner" t-value="doc.partner_id or doc.line_ids.mapped('partner_id')[:1]"/>
+          <t t-set="payee_ref" t-value="doc.x_payee_ref"/>
           <t t-set="voucher_no" t-value="doc.name"/>
           <t t-set="voucher_date" t-value="doc.date"/>
           <t t-set="amount" t-value="dv_amount"/>
