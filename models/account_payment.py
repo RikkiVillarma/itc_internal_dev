@@ -156,6 +156,34 @@ class AccountPayment(models.Model):
         return self.env.ref('itc_internal_dev.action_report_bir_2307').report_action(self)
 
     # ------------------------------------------------------------------
+    # Bridge: WHT entered on the payment form (wht_tax_ids) -> the fields
+    # _prepare_move_line_default_vals reads to build the CWT line.
+    #
+    # The register-payment wizard fills payment_tax_id / base / amount
+    # directly. Payments created from the form only have wht_tax_ids and
+    # wht_amount, so without this bridge no CWT line was ever posted.
+    #
+    # payment.amount is the NET cash received (the onchange sets it to
+    # invoice total - WHT), so the gross that the AR line must clear is
+    # amount + wht_amount.
+    # ------------------------------------------------------------------
+    def _sync_wht_to_payment_tax(self):
+        for pay in self:
+            if not pay.wht_tax_ids or not pay.wht_amount:
+                continue
+            if len(pay.wht_tax_ids) > 1:
+                _logger.warning(
+                    "Payment %s has %s withholding taxes; the CWT line will use "
+                    "the account of %s for the combined amount.",
+                    pay.name, len(pay.wht_tax_ids), pay.wht_tax_ids[0].name,
+                )
+            pay.write({
+                'payment_tax_id': pay.wht_tax_ids[:1].id,
+                'payment_tax_amount': pay.wht_amount,
+                'payment_base_amount': pay.amount + pay.wht_amount,
+            })
+
+    # ------------------------------------------------------------------
     # Override: inject the withholding tax line into the journal entry.
     #
     # Deliberately does NOT call tax.compute_all() again here — it uses
@@ -262,6 +290,10 @@ class AccountPayment(models.Model):
     # Log tax summary to chatter on post
     # ------------------------------------------------------------------
     def action_post(self):
+        # Must run BEFORE super(): the journal entry is generated during
+        # posting, and _prepare_move_line_default_vals needs these fields.
+        self.filtered(lambda p: not p.move_id)._sync_wht_to_payment_tax()
+
         res = super().action_post()
 
         # Log WHT summary
