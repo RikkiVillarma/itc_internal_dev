@@ -18,14 +18,18 @@
         <t t-set="ack_cert_date" t-value="''"/>
         <t t-set="series_range" t-value="'OR-000000000001 - OR-999999999999'"/>
         <t t-set="fmt" t-value="{'widget': 'float', 'precision': 2}"/>
+        <!-- Account codes treated as Creditable Withholding Tax (EWT / 2307) -->
+        <t t-set="ewt_codes" t-value="('1042',)"/>
 
         <!-- ================= COMPUTATIONS ================= -->
         <t t-set="invoices" t-value="doc.reconciled_invoice_ids"/>
-        <t t-set="gross" t-value="sum(invoices.mapped('amount_total'))"/>
-        <!-- EWT (2307) booked on the invoices OR on the payment's own journal entry -->
-        <t t-set="ewt_inv" t-value="sum(abs(l.balance) for l in invoices.line_ids if '2307' in (l.account_id.name or ''))"/>
-        <t t-set="ewt_pay" t-value="sum(abs(l.balance) for l in doc.move_id.line_ids if '2307' in (l.account_id.name or ''))"/>
+        <!-- EWT booked on the invoices: by account code, or any negative (withholding) tax line -->
+        <t t-set="ewt_inv" t-value="sum(abs(l.balance) for l in invoices.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0))"/>
+        <!-- EWT booked on the payment's own journal entry (e.g. payment difference / write-off) -->
+        <t t-set="ewt_pay" t-value="sum(abs(l.balance) for l in doc.move_id.line_ids if l.account_id.code in ewt_codes)"/>
         <t t-set="ewt_total" t-value="round(ewt_inv + ewt_pay, 2)"/>
+        <!-- amount_total is already net of EWT booked on the invoice, so add it back to get gross -->
+        <t t-set="gross" t-value="round(sum(invoices.mapped('amount_total')) + ewt_inv, 2)"/>
         <t t-set="net_due" t-value="round(gross - ewt_total, 2)"/>
         <!-- Balancing figures so Collection Details always ties to the payment amount -->
         <t t-set="other_ded" t-value="round(max(net_due - doc.amount, 0.0), 2)"/>
@@ -93,7 +97,7 @@
                 <td style="width: 40%;"><strong>OR NO.:</strong> <span t-field="doc.name"/></td>
                 <td style="width: 25%;" class="or-c"><strong t-esc="branch_code"/></td>
                 <td style="width: 35%;" class="or-r">
-                  <strong>OR Date</strong> <span t-field="doc.date" t-options='{"format": "MMMM dd, yyyy"}'/>
+                  <strong>Date</strong> <span t-field="doc.date" t-options='{"format": "MMMM dd, yyyy"}'/>
                 </td>
               </tr>
             </table>
@@ -116,7 +120,7 @@
 
             <div class="or-gap"/>
 
-            <!-- ===== REFERENCE DETAILS (2 per row) ===== -->
+            <!-- ===== REFERENCE DETAILS (2 per row, gross of EWT) ===== -->
             <table class="or-tbl">
               <thead>
                 <tr><th colspan="4">REFERENCE DETAILS</th></tr>
@@ -131,11 +135,13 @@
                 <t t-foreach="range(ref_rows)" t-as="r">
                   <t t-set="left" t-value="invoices[2 * r] if 2 * r &lt; len(invoices) else False"/>
                   <t t-set="right" t-value="invoices[2 * r + 1] if 2 * r + 1 &lt; len(invoices) else False"/>
+                  <t t-set="left_ewt" t-value="sum(abs(l.balance) for l in left.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0)) if left else 0.0"/>
+                  <t t-set="right_ewt" t-value="sum(abs(l.balance) for l in right.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0)) if right else 0.0"/>
                   <tr>
                     <td><t t-if="left" t-esc="left.name"/></td>
-                    <td class="or-r"><t t-if="left" t-esc="left.amount_total" t-options="fmt"/></td>
+                    <td class="or-r"><t t-if="left" t-esc="left.amount_total + left_ewt" t-options="fmt"/></td>
                     <td><t t-if="right" t-esc="right.name"/></td>
-                    <td class="or-r"><t t-if="right" t-esc="right.amount_total" t-options="fmt"/></td>
+                    <td class="or-r"><t t-if="right" t-esc="right.amount_total + right_ewt" t-options="fmt"/></td>
                   </tr>
                 </t>
               </tbody>
@@ -256,7 +262,7 @@
 
             <div class="or-gap"/>
 
-            <!-- ===== ACCOUNT TITLES ===== -->
+            <!-- ===== ACCOUNT TITLES (classic collection entry: Cash + CWT / AR gross) ===== -->
             <t t-set="debit_total" t-value="doc.amount + ewt_total + other_ded"/>
             <t t-set="credit_total" t-value="gross + deposit"/>
             <table class="or-tbl">
@@ -278,7 +284,7 @@
                   <td/>
                 </tr>
                 <tr t-if="ewt_total">
-                  <td>Creditable Tax Withheld At Source - Receivable (2307)</td>
+                  <td>Creditable Withholding Tax (CWT)</td>
                   <td class="or-r"><t t-esc="ewt_total" t-options="fmt"/></td>
                   <td/>
                 </tr>
