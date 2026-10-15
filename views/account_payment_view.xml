@@ -27,7 +27,7 @@
                             class="oe_highlight"
                             invisible="partner_type != 'supplier'"/>
             </xpath>
-            <!-- Add after payment method -->
+            <!-- Add after payment type -->
             <xpath expr="//field[@name='payment_type']" position="after">
                 <field name="expense_type" invisible="partner_type != 'supplier'" domain="[('can_be_expensed', '=', True)]"/>
                 <field name="wht_tax_ids"
@@ -39,6 +39,11 @@
                        readonly="1"
                        force_save="1"
                        invisible="wht_amount == 0"/>
+            </xpath>
+
+            <!-- Add after payment method -->
+            <xpath expr="//field[@name='payment_method_line_id']" position="after">
+                <field name="release_date"/>
             </xpath>
 
         </field>
