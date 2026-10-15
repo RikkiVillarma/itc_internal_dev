@@ -1,5 +1,13 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
 from datetime import date
+import re
+
+# Used to classify a PO line's VAT treatment from its (non-withholding) tax names,
+# e.g. "0% ZR" -> zero-rated, "0% EXEMPT" -> VAT-exempt.
+_ZERO_RATED_RE = re.compile(r'\b(ZR|ZERO[\s-]?RATED)\b', re.IGNORECASE)
+_EXEMPT_RE = re.compile(r'\bEXEMPT\b', re.IGNORECASE)
+
 
 class Purchase(models.Model):
     _inherit = 'purchase.order'
@@ -8,6 +16,50 @@ class Purchase(models.Model):
         return self.env.ref(
             'itc_internal_dev.action_report_purchase_quotation_custom'
         ).report_action(self)
+
+    def action_print_bir_2307(self):
+        """Print BIR 2307 for the vendor bills of this PO.
+
+        The 2307 report (itc_internal_dev.action_report_bir_2307) is bound to
+        account.move and reads get_2307_details() from each bill, so the PO
+        just collects its posted vendor bills and hands them to that report.
+        One page per bill (per payor), same as printing from the bill itself.
+        """
+        bills = self.invoice_ids.filtered(
+            lambda m: m.move_type == 'in_invoice' and m.state == 'posted'
+        )
+        if not bills:
+            raise UserError(_(
+                "There is no posted vendor bill for this purchase order yet. "
+                "Post the bill first, then print the BIR 2307."
+            ))
+        return self.env.ref('itc_internal_dev.action_report_bir_2307').report_action(bills)
+
+    def get_vat_breakdown(self):
+        """VAT summary for the IPO/LPO printout.
+
+        Each line's untaxed subtotal goes to Vatable / VAT-Exempt / Zero-Rated
+        according to its VAT tax (see PurchaseOrderLine.get_vat_category).
+        vat_amount is VAT only: withholding taxes on the line are left out,
+        unlike amount_tax, which nets them in.
+        """
+        self.ensure_one()
+        res = {'vatable': 0.0, 'exempt': 0.0, 'zero_rated': 0.0, 'vat_amount': 0.0}
+        currency = self.currency_id
+        for line in self.order_line.filtered(lambda l: not l.display_type):
+            res[line.get_vat_category()] += line.price_subtotal
+
+            vat_taxes = line.taxes_id.filtered(lambda t: not line._is_withholding_tax(t))
+            if vat_taxes:
+                taxes_res = vat_taxes.compute_all(
+                    line.price_unit * (1 - (line.discount or 0.0) / 100.0),
+                    currency=currency,
+                    quantity=line.product_qty,
+                    product=line.product_id,
+                    partner=self.partner_id,
+                )
+                res['vat_amount'] += sum(t['amount'] for t in taxes_res['taxes'])
+        return {key: currency.round(value) for key, value in res.items()}
 
     x_vendor_tin = fields.Char(
         string="Vendor TIN",
@@ -118,6 +170,24 @@ class PurchaseOrderLine(models.Model):
         """Placeholder criterion — amount < 0.
         TODO: replace with finalized identification logic (tax group / flag)."""
         return tax.amount < 0
+
+    def get_vat_category(self):
+        """Return 'vatable', 'zero_rated' or 'exempt' for this line.
+
+        Looks only at the line's VAT taxes (withholding taxes excluded):
+          - any VAT tax with a positive rate (e.g. "12% S")  -> vatable
+          - a tax named like "0% ZR" / "Zero-Rated"          -> zero_rated
+          - a tax named like "0% EXEMPT"                     -> exempt
+          - no VAT tax at all                                -> exempt
+        """
+        self.ensure_one()
+        vat_taxes = self.taxes_id.filtered(lambda t: not self._is_withholding_tax(t))
+        if any(tax.amount > 0 for tax in vat_taxes):
+            return 'vatable'
+        names = ' '.join(vat_taxes.mapped('name'))
+        if _ZERO_RATED_RE.search(names):
+            return 'zero_rated'
+        return 'exempt'
 
     @api.depends('taxes_id')
     def _compute_split_taxes(self):

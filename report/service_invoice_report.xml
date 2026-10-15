@@ -221,7 +221,7 @@
                         </td>
                       </t>
                       <t t-else="">
-                        <td t-foreach="range(7)" t-as="col" style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;"> </td>
+                        <td t-foreach="range(7)" t-as="col" style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;"> </td>
                       </t>
                     </tr>
                   </t>
@@ -301,6 +301,28 @@
               <t t-set="amount_due"
                 t-value="max(0.0, (doc.amount_total or 0.0) - amount_2307_ewt - amount_2307_vat)"/>
 
+              <!-- ============================================ -->
+              <!-- Amount in Words - currency-aware label -->
+              <!-- USD and SGD both use "Dollars" as unit label in Odoo, -->
+              <!-- so replace it with a distinct label. PHP label is -->
+              <!-- singular "Peso" in the DB, so force plural "Pesos". -->
+              <!-- Singular form is used only when the whole amount is 1. -->
+              <!-- ============================================ -->
+              <t t-set="currency_word_plural"
+                t-value="{'PHP': 'Pesos', 'USD': 'US Dollars', 'SGD': 'Singapore Dollars'}"/>
+
+              <t t-set="currency_word_singular"
+                t-value="{'PHP': 'Peso', 'USD': 'US Dollar', 'SGD': 'Singapore Dollar'}"/>
+
+              <t t-set="currency_word_map"
+                t-value="currency_word_singular if int(doc.amount_total or 0.0) == 1 else currency_word_plural"/>
+
+              <t t-set="amount_words_raw"
+                t-value="doc.currency_id.amount_to_text(doc.amount_total)"/>
+
+              <t t-set="amount_words"
+                t-value="amount_words_raw.replace(doc.currency_id.currency_unit_label, currency_word_map[doc.currency_id.name], 1) if (doc.currency_id.name in currency_word_map and doc.currency_id.currency_unit_label) else amount_words_raw"/>
+
               <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:5px;">
 
                 <!-- ROW 1 -->
@@ -309,7 +331,7 @@
                   <td rowspan="2" style="width:65%; padding:8px; vertical-align:top; border:1px solid black; font-style:italic;">
                     <strong>Amount in words:</strong>
                     ***
-                    <span t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/>
+                    <span t-esc="amount_words"/>
                     ***
                   </td>
 

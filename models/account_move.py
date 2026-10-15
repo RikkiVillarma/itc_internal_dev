@@ -1,5 +1,6 @@
 from odoo import models, fields, api
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import html2plaintext, date_utils
 
 
 class AccountMove(models.Model):
@@ -64,61 +65,80 @@ class AccountMove(models.Model):
             return []
 
         corp = self.company_id
+        # 2307 period = the whole calendar month of the bill (e.g. Oct 8 -> Oct 1 to Oct 31)
+        ref_date = self.invoice_date or self.date
         corp_data = {
             'corporation': corp,
+            'period_from': date_utils.start_of(ref_date, 'month'),
+            'period_to': date_utils.end_of(ref_date, 'month'),
             'lines': [],
             'gross_amount': 0.0,
             'tax_withheld': 0.0,
             'net_amount': 0.0,
         }
 
-        for line in self.invoice_line_ids:
-            if not line.display_type:  # Ignore section/note lines
-                gross = line.price_subtotal or 0.0
+        # Odoo 18: real invoice lines have display_type == 'product'
+        # (sections/notes are 'line_section' / 'line_note'), so `not display_type`
+        # would skip every line.
+        for line in self.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
+            # Filter for withholding taxes on the line (flatten in case of tax groups)
+            wht_taxes = line.tax_ids.flatten_taxes_hierarchy().filtered(
+                lambda t: t.amount < 0 or 'wht' in (t.name or '').lower()
+            )
 
-                # Compute withholding taxes cleanly via Odoo tax logic
-                # Filter for withholding taxes on the line
-                wht_taxes = line.tax_ids.filtered(lambda t: t.amount < 0 or 'wht' in t.name.lower())
-                
-                # Compute total tax amount in currency
-                tax_vals = line.tax_ids.compute_all(
-                    line.price_unit,
-                    currency=line.currency_id,
-                    quantity=line.quantity,
-                    product=line.product_id,
-                    partner=line.partner_id
-                )
-                
-                # Calculate actual tax withheld currency amount
-                total_tax_amount = sum(
-                    t['amount'] for t in tax_vals['taxes'] 
-                    if t['id'] in wht_taxes.ids
-                )
-                
-                tax_withheld = abs(total_tax_amount)
-                net = gross - tax_withheld
+            # Only income payments that were actually subject to withholding go on the 2307
+            if not wht_taxes:
+                continue
 
-                atc_codes = ', '.join(wht_taxes.mapped('name'))
-                tax_rate = sum(abs(t.amount) for t in wht_taxes)
+            gross = line.price_subtotal or 0.0
 
-                line_entry = {
-                    'description': line.name or '',
-                    'atc': atc_codes,
-                    'rate': tax_rate,
-                    'month': self.invoice_date.month if self.invoice_date else False,
-                    'gross_amount': gross,
-                    'tax_withheld': tax_withheld,
-                    'net_amount': net,
-                    'tax_type': '',
-                    'payment_term': self.invoice_payment_term_id.name or '',
-                    'currency': self.currency_id.name,
-                    'conversion_rate': 1.0,
-                }
+            # Compute taxes via Odoo tax logic (discount-aware, so it matches the bill)
+            price_unit = line.price_unit * (1 - (line.discount or 0.0) / 100.0)
+            tax_vals = line.tax_ids.compute_all(
+                price_unit,
+                currency=line.currency_id,
+                quantity=line.quantity,
+                product=line.product_id,
+                partner=line.partner_id,
+            )
 
-                corp_data['lines'].append(line_entry)
-                corp_data['gross_amount'] += gross
-                corp_data['tax_withheld'] += tax_withheld
-                corp_data['net_amount'] += net
+            # Calculate actual tax withheld currency amount
+            total_tax_amount = sum(
+                t['amount'] for t in tax_vals['taxes']
+                if t['id'] in wht_taxes.ids
+            )
+
+            tax_withheld = abs(total_tax_amount)
+            net = gross - tax_withheld
+
+            atc_codes = ', '.join(wht_taxes.mapped('name'))
+            tax_rate = sum(abs(t.amount) for t in wht_taxes)
+
+            # 2307 "Income Payments" column = the WHT tax's Description
+            # (Advanced Options tab, an HTML field in Odoo 18), falling back to the tax name
+            description = '; '.join(
+                ' '.join(html2plaintext(t.description or '').split()) or t.name
+                for t in wht_taxes
+            )
+
+            line_entry = {
+                'description': description,
+                'atc': atc_codes,
+                'rate': tax_rate,
+                'month': ref_date.month,
+                'gross_amount': gross,
+                'tax_withheld': tax_withheld,
+                'net_amount': net,
+                'tax_type': '',
+                'payment_term': self.invoice_payment_term_id.name or '',
+                'currency': self.currency_id.name,
+                'conversion_rate': 1.0,
+            }
+
+            corp_data['lines'].append(line_entry)
+            corp_data['gross_amount'] += gross
+            corp_data['tax_withheld'] += tax_withheld
+            corp_data['net_amount'] += net
 
         return [corp_data]
 
