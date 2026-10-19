@@ -221,7 +221,7 @@
                         </td>
                       </t>
                       <t t-else="">
-                        <td t-foreach="range(7)" t-as="col" style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;"> </td>
+                        <td t-foreach="range(7)" t-as="col" style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;">&#160;</td>
                       </t>
                     </tr>
                   </t>
@@ -302,6 +302,39 @@
                 t-value="max(0.0, (doc.amount_total or 0.0) - amount_2307_ewt - amount_2307_vat)"/>
 
               <!-- ============================================ -->
+              <!-- VAT Classification per line (based on tax)   -->
+              <!--  - 0% tax with "EXEMPT" in name/label -> Exempt
+                    - Line with no VAT tax at all        -> Exempt
+                    - Other 0% tax (e.g. Zero Rated)     -> Zero Rated
+                    - Tax rate > 0 (e.g. 12% VAT)        -> VATable
+                   Negative taxes (withholding / EWT) are ignored here. -->
+              <!-- ============================================ -->
+              <t t-set="product_lines"
+                t-value="doc.invoice_line_ids.filtered(lambda l: l.display_type == 'product')"/>
+
+              <t t-set="exempt_lines"
+                t-value="product_lines.filtered(lambda l:
+                  not l.tax_ids.filtered(lambda t: t.amount &gt;= 0)
+                  or any(t.amount == 0 and 'EXEMPT' in ((t.name or '') + ' ' + (t.invoice_label or '')).upper() for t in l.tax_ids))"/>
+
+              <t t-set="zero_rated_lines"
+                t-value="(product_lines - exempt_lines).filtered(lambda l:
+                  any(t.amount == 0 for t in l.tax_ids)
+                  and not any(t.amount &gt; 0 for t in l.tax_ids))"/>
+
+              <t t-set="vatable_lines"
+                t-value="product_lines - exempt_lines - zero_rated_lines"/>
+
+              <t t-set="vatable_amount"
+                t-value="sum(vatable_lines.mapped('price_subtotal'))"/>
+
+              <t t-set="zero_rated_amount"
+                t-value="sum(zero_rated_lines.mapped('price_subtotal'))"/>
+
+              <t t-set="exempt_amount"
+                t-value="sum(exempt_lines.mapped('price_subtotal'))"/>
+
+              <!-- ============================================ -->
               <!-- Amount in Words - currency-aware label -->
               <!-- USD and SGD both use "Dollars" as unit label in Odoo, -->
               <!-- so replace it with a distinct label. PHP label is -->
@@ -340,7 +373,7 @@
                   </td>
 
                   <td style="width:17%; padding:5px; text-align:right; border:1px solid black;">
-                    <t t-esc="'{:,.2f}'.format(doc.amount_untaxed or 0)"/>
+                    <t t-esc="'{:,.2f}'.format(vatable_amount or 0.0)"/>
                   </td>
                 </tr>
 
@@ -351,7 +384,7 @@
                   </td>
 
                   <td style="padding:5px; text-align:right; border:1px solid black;">
-                    0.00
+                    <t t-esc="'{:,.2f}'.format(zero_rated_amount or 0.0)"/>
                   </td>
                 </tr>
 
@@ -369,7 +402,7 @@
                   </td>
 
                   <td style="padding:5px; text-align:right; border:1px solid black;">
-                    0.00
+                    <t t-esc="'{:,.2f}'.format(exempt_amount or 0.0)"/>
                   </td>
                 </tr>
 
@@ -412,7 +445,7 @@
                   </td>
 
                   <td style="padding:5px; text-align:right; border:1px solid black;">
-                    <t t-esc="'{:,.2f}'.format(amount_2307_vat or 0.0)"/>
+                    <!-- <t t-esc="'{:,.2f}'.format(amount_2307_vat or 0.0)"/> -->
                   </td>
                 </tr>
 
@@ -423,7 +456,7 @@
                   </td>
 
                   <td style="padding:5px; text-align:right; border:1px solid black; font-weight:bold;">
-                    <t t-esc="'{:,.2f}'.format((doc.amount_total or 0.0) - amount_2307_ewt - amount_2307_vat)"/>
+                    <t t-esc="'{:,.2f}'.format((doc.amount_total or 0.0) - amount_2307_ewt)"/>
                   </td>
                 </tr>
 
