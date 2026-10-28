@@ -17,6 +17,7 @@
                     type="action"
                     invisible="x_purchase_type != 'local'"
                     class="btn-primary"/>
+
       </header>
       <xpath expr="//field[@name='partner_id']" position="before">
          <field name="x_purchase_type" readonly="state == 'purchase'"/>

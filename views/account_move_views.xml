@@ -25,7 +25,7 @@
                             string="Print Service Invoice"
                             type="action"
                             class="oe_highlight"
-                            invisible="move_type != 'out_invoice' or x_invoice_type == 'consu' or state == 'draft'"/>
+                            invisible="move_type != 'out_invoice' and state == 'Posted'"/>
 
                     <button name="%(report_sales_invoice_account_move)d"
                             string="Print Sales Invoice"

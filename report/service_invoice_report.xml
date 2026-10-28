@@ -109,6 +109,7 @@
               <t t-set="exempt_lines"
                 t-value="product_lines - vatable_lines - zero_rated_lines"/>
 
+              <!-- Net (VAT-exclusive) amounts per category; correct for both VAT-inclusive and VAT-exclusive taxes -->
               <t t-set="vatable_sales" t-value="sum(vatable_lines.mapped('price_subtotal'))"/>
               <t t-set="zero_rated_sales" t-value="sum(zero_rated_lines.mapped('price_subtotal'))"/>
               <t t-set="exempt_sales" t-value="sum(exempt_lines.mapped('price_subtotal'))"/>
@@ -148,9 +149,16 @@
               <t t-set="amount_words"
                 t-value="amount_words_raw.replace(' ' + unit_label, ' ' + currency_prefix + ' ' + unit_label, 1) if (currency_prefix and unit_label and (currency_prefix + ' ' + unit_label) not in amount_words_raw) else amount_words_raw"/>
 
+              <!-- Line amounts shown VAT-inclusive (VAT taxes only; withholding excluded),
+                   whether the tax is price-included or price-excluded -->
+              <t t-set="line_unit_incl"
+                t-value="[l.tax_ids.filtered('x_vat_category').compute_all(l.price_unit, currency=doc.currency_id, quantity=1.0, product=l.product_id, partner=doc.partner_id)['total_included'] for l in product_lines]"/>
+              <t t-set="line_amount_incl"
+                t-value="[l.tax_ids.filtered('x_vat_category').compute_all(l.price_unit * (1 - (l.discount or 0.0) / 100.0), currency=doc.currency_id, quantity=l.quantity, product=l.product_id, partner=doc.partner_id)['total_included'] for l in product_lines]"/>
+
               <!-- Line table totals -->
-              <t t-set="gross_total" t-value="sum(l.quantity * l.price_unit for l in product_lines)"/>
-              <t t-set="net_total" t-value="sum(product_lines.mapped('price_subtotal'))"/>
+              <t t-set="gross_total" t-value="sum(line_unit_incl[i] * product_lines[i].quantity for i in range(len(product_lines)))"/>
+              <t t-set="net_total" t-value="sum(line_amount_incl)"/>
               <t t-set="discount_total" t-value="gross_total - net_total"/>
 
               <!-- ============================================ -->
@@ -284,17 +292,17 @@
                     <th style="border:1px solid black; padding:5px; text-align:center; width:60px; font-weight:bold;">
                       Unit
                     </th>
-                    <th style="border:1px solid black; padding:5px; text-align:center; width:90px; font-weight:bold;">
-                      Unit Price
+                    <th style="border:1px solid black; padding:5px; text-align:center; width:95px; font-weight:bold;">
+                      Unit Price<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
-                      Total
+                      Total<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:80px; font-weight:bold;">
                       Discount
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
-                      Amount
+                      Amount<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
                     </th>
                   </tr>
                 </thead>
@@ -314,16 +322,16 @@
                           <t t-esc="line.product_uom_id.name or ''"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                          <t t-esc="'{:,.2f}'.format(line.price_unit)"/>
+                          <t t-esc="'{:,.2f}'.format(line_unit_incl[row_index])"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                          <t t-esc="'{:,.2f}'.format(line.quantity * line.price_unit)"/>
+                          <t t-esc="'{:,.2f}'.format(line_unit_incl[row_index] * line.quantity)"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
                           <t t-esc="('{:g}'.format(line.discount) + '%') if line.discount else '0%'"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                          <t t-esc="'{:,.2f}'.format(line.price_subtotal)"/>
+                          <t t-esc="'{:,.2f}'.format(line_amount_incl[row_index])"/>
                         </td>
                       </t>
                       <t t-else="">

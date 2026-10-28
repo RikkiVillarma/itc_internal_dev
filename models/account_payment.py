@@ -1,7 +1,23 @@
-from odoo import api, fields, models, _
+from odoo import api, fields, models, Command, _
 from odoo.exceptions import ValidationError, UserError
 import logging
 _logger = logging.getLogger(__name__)
+
+
+def _set_line_amounts(vals, amount_currency, balance):
+    """Set every amount key of a move line vals dict consistently.
+
+    Odoo 18 move lines are driven by 'balance': when a vals dict has both
+    'balance' and 'debit'/'credit', the debit/credit keys are discarded.
+    Payment lines from super() carry 'balance', so changing only debit /
+    credit left the old balance in place while amount_currency was
+    changed, which raised "The amount expressed in the secondary
+    currency must be positive when account is debited...".
+    """
+    vals['balance'] = balance
+    vals['debit'] = balance if balance > 0.0 else 0.0
+    vals['credit'] = -balance if balance < 0.0 else 0.0
+    vals['amount_currency'] = amount_currency
 
 
 class AccountPayment(models.Model):
@@ -11,6 +27,13 @@ class AccountPayment(models.Model):
         'product.template',
         string="Expense Type",
         domain=[('can_be_expensed', '=', True)]
+    )
+
+    release_date = fields.Date(
+        string="Release Date",
+        copy=False,
+        tracking=True,
+        help="Date the payment (cash/check) was actually released to the payee.",
     )
 
     # ------------------------------------------------------------------
@@ -168,6 +191,11 @@ class AccountPayment(models.Model):
     # amount + wht_amount.
     # ------------------------------------------------------------------
     def _sync_wht_to_payment_tax(self):
+        # Payments created by the Register Payment wizard already carry the
+        # exact base/WHT figures (incl. partial-payment proration), so don't
+        # overwrite them with the memo-based wht_amount.
+        if self.env.context.get('wht_from_register'):
+            return
         for pay in self:
             if not pay.wht_tax_ids or not pay.wht_amount:
                 continue
@@ -182,6 +210,52 @@ class AccountPayment(models.Model):
                 'payment_tax_amount': pay.wht_amount,
                 'payment_base_amount': pay.amount + pay.wht_amount,
             })
+
+    # ------------------------------------------------------------------
+    # Payment already has a journal entry (confirmed first, then reset to
+    # draft to add WHT). Odoo's own sync only rewrites the bank and AR
+    # lines from `amount`, so the CWT line never appears and AR is short
+    # by the WHT. Rebuild every line from _prepare_move_line_default_vals
+    # so the override above is applied.
+    # ------------------------------------------------------------------
+    def _rebuild_wht_move_lines(self):
+        for pay in self:
+            move = pay.move_id
+            if not move or move.state != 'draft' or not pay.payment_tax_id:
+                continue
+            line_vals_list = pay._prepare_move_line_default_vals()
+            move.with_context(skip_account_move_synchronization=True).write({
+                'line_ids': [Command.delete(line.id) for line in move.line_ids]
+                            + [Command.create(vals) for vals in line_vals_list],
+            })
+
+    # ------------------------------------------------------------------
+    # Resetting to draft unreconciles the payment from the invoice, and
+    # the rebuilt AR line is a new record anyway, so match it back to the
+    # invoice (found by reconciliation or by memo = invoice number).
+    # ------------------------------------------------------------------
+    def _reconcile_wht_with_invoice(self):
+        account_types = ('asset_receivable', 'liability_payable')
+        for pay in self:
+            if not pay.payment_tax_id or pay.move_id.state != 'posted':
+                continue
+            invoices = pay.reconciled_invoice_ids
+            if not invoices and pay.memo:
+                invoices = self.env['account.move'].search([
+                    ('name', '=', pay.memo),
+                    ('move_type', 'in', ('out_invoice', 'in_invoice')),
+                    ('state', '=', 'posted'),
+                    ('company_id', '=', pay.company_id.id),
+                ], limit=1)
+            if not invoices:
+                continue
+            lines = (pay.move_id.line_ids | invoices.line_ids).filtered(
+                lambda l: l.account_id.account_type in account_types and not l.reconciled
+            )
+            for account in lines.account_id:
+                to_reconcile = lines.filtered(lambda l: l.account_id == account)
+                if len(to_reconcile) > 1:
+                    to_reconcile.reconcile()
 
     # ------------------------------------------------------------------
     # Override: inject the withholding tax line into the journal entry.
@@ -217,26 +291,37 @@ class AccountPayment(models.Model):
         liquidity_line = line_vals_list[0]
         counterpart_line = line_vals_list[1]
 
-        liquidity_is_debit = bool(liquidity_line.get('debit', 0.0))
-        sign = 1 if liquidity_is_debit else -1
+        # Inbound (customer collection): bank/cash and CWT are debited, AR
+        # credited. Outbound (vendor payment): the reverse. Taken from
+        # payment_type rather than from the vals dicts, because Odoo 18
+        # builds these lines with a 'balance' key and the old
+        # bool(liquidity_line.get('debit')) check came out False for every
+        # inbound payment.
+        sign = 1 if self.payment_type == 'inbound' else -1
 
-        # Liquidity line: only the NET cash actually moves
-        if liquidity_is_debit:
-            liquidity_line['debit'] = net_amount
-            liquidity_line['credit'] = 0.0
-        else:
-            liquidity_line['credit'] = net_amount
-            liquidity_line['debit'] = 0.0
-        liquidity_line['amount_currency'] = sign * net_amount
+        # Amounts above are in the payment currency (amount_currency);
+        # 'balance' must be in company currency. For PHP payments the two
+        # are identical. The CWT line takes whatever balance closes the
+        # entry, so foreign-currency rounding can't unbalance it.
+        company_currency = self.company_id.currency_id
 
-        # Counterpart line: still clears the FULL invoice amount
-        if counterpart_line.get('debit', 0.0):
-            counterpart_line['debit'] = base_amount
-            counterpart_line['credit'] = 0.0
-        else:
-            counterpart_line['credit'] = base_amount
-            counterpart_line['debit'] = 0.0
-        counterpart_line['amount_currency'] = -sign * base_amount
+        def to_company(amount):
+            if currency == company_currency:
+                return amount
+            return currency._convert(amount, company_currency, self.company_id, self.date or fields.Date.context_today(self))
+
+        liquidity_amount_currency = sign * net_amount
+        counterpart_amount_currency = -sign * base_amount
+        tax_amount_currency = sign * tax_amount
+
+        liquidity_balance = to_company(liquidity_amount_currency)
+        counterpart_balance = to_company(counterpart_amount_currency)
+        tax_balance = -(liquidity_balance + counterpart_balance)
+
+        # Liquidity line: only the NET cash actually moves.
+        # Counterpart line: still clears the FULL invoice amount.
+        _set_line_amounts(liquidity_line, liquidity_amount_currency, liquidity_balance)
+        _set_line_amounts(counterpart_line, counterpart_amount_currency, counterpart_balance)
 
         # Resolve the WHT account from the tax's own repartition lines
         repartition = tax.invoice_repartition_line_ids.filtered(
@@ -253,30 +338,17 @@ class AccountPayment(models.Model):
             else counterpart_line.get('account_id')
         )
 
-        # FIX: the tax line must move WITH the liquidity line (same side),
-        # not be branched on payment_type. Previously this was inverted:
-        #   inbound  -> was credited (wrong; WHT receivable is an asset,
-        #               should debit same as the bank line)
-        #   outbound -> was debited (wrong; WHT payable is a liability,
-        #               should credit same as the bank line)
-        # which made the entry fail to balance.
-        if liquidity_is_debit:
-            tax_debit, tax_credit = tax_amount, 0.0
-            tax_amount_currency = tax_amount
-        else:
-            tax_debit, tax_credit = 0.0, tax_amount
-            tax_amount_currency = -tax_amount
-
-        line_vals_list.append({
+        # The CWT line moves WITH the liquidity line (same side):
+        # inbound -> debit (CWT is an asset), outbound -> credit (liability).
+        tax_line_vals = {
             'name': tax.name,
             'account_id': tax_account_id,
-            'debit': tax_debit,
-            'credit': tax_credit,
-            'amount_currency': tax_amount_currency,
             'currency_id': currency.id,
             'partner_id': self.partner_id.id if self.partner_id else False,
             'tax_base_amount': base_amount,
-        })
+        }
+        _set_line_amounts(tax_line_vals, tax_amount_currency, tax_balance)
+        line_vals_list.append(tax_line_vals)
         # NOTE: deliberately not setting tax_line_id / tax_repartition_line_id /
         # tax_tag_ids here. Creditable WHT isn't a VAT-relevant tax for the
         # Philippine tax returns, so it shouldn't show up in the VAT report
@@ -290,11 +362,17 @@ class AccountPayment(models.Model):
     # Log tax summary to chatter on post
     # ------------------------------------------------------------------
     def action_post(self):
-        # Must run BEFORE super(): the journal entry is generated during
+        # Must run BEFORE super(): a new journal entry is generated during
         # posting, and _prepare_move_line_default_vals needs these fields.
-        self.filtered(lambda p: not p.move_id)._sync_wht_to_payment_tax()
+        # If the payment already has a draft entry (reset to draft to add
+        # WHT), its lines are rebuilt so the CWT line is included.
+        wht_payments = self.filtered('wht_tax_ids')
+        wht_payments._sync_wht_to_payment_tax()
+        wht_payments._rebuild_wht_move_lines()
 
         res = super().action_post()
+
+        wht_payments._reconcile_wht_with_invoice()
 
         # Log WHT summary
         for payment in self.filtered('payment_tax_id'):
@@ -402,7 +480,20 @@ class AccountPaymentRegister(models.TransientModel):
     # type a number instead of picking a rate, say so and this can be
     # adjusted.
     # ------------------------------------------------------------------
-    @api.depends('amount', 'tax_id', 'currency_id', 'partner_id')
+    # ------------------------------------------------------------------
+    # WHT is computed on the invoices' UNTAXED amount (VAT excluded), the
+    # same basis as the payment form's wht_amount. Previously this ran
+    # compute_all on wizard.amount, which includes VAT (e.g. 2% of 4,480
+    # = 89.60 instead of 2% of 4,000 = 80.00).
+    #
+    # For a partial payment the untaxed base is prorated by
+    # wizard.amount / invoice total.
+    #
+    #   base_amount    = wizard.amount (gross; what the AR line clears)
+    #   tax_amount     = WHT
+    #   total_with_tax = wizard.amount - WHT (net cash received)
+    # ------------------------------------------------------------------
+    @api.depends('amount', 'tax_id', 'currency_id', 'partner_id', 'line_ids')
     def _compute_tax_breakdown(self):
         TaxLine = self.env['account.payment.register.tax.line']
         for wizard in self:
@@ -415,16 +506,27 @@ class AccountPaymentRegister(models.TransientModel):
                 continue
 
             currency = wizard.currency_id or self.env.company.currency_id
+
+            invoices = wizard.line_ids.move_id.filtered(lambda m: m.is_invoice(include_receipts=True))
+            inv_total = sum(invoices.mapped('amount_total'))
+            inv_untaxed = sum(invoices.mapped('amount_untaxed'))
+            if invoices and inv_total:
+                ratio = min(wizard.amount / inv_total, 1.0)
+                wht_base = currency.round(inv_untaxed * ratio)
+            else:
+                wht_base = wizard.amount
+
             taxes_res = wizard.tax_id.compute_all(
-                price_unit=wizard.amount,
+                price_unit=wht_base,
                 currency=currency,
                 quantity=1.0,
                 partner=wizard.partner_id or None,
             )
+            wht = currency.round(sum(abs(t['amount']) for t in taxes_res.get('taxes', [])))
 
-            wizard.base_amount = taxes_res['total_excluded']
-            wizard.total_with_tax = taxes_res['total_included']
-            wizard.tax_amount = abs(wizard.total_with_tax - wizard.base_amount)
+            wizard.tax_amount = wht
+            wizard.base_amount = wizard.amount
+            wizard.total_with_tax = wizard.amount - wht
 
             lines = TaxLine
             for t in taxes_res.get('taxes', []):
@@ -441,7 +543,14 @@ class AccountPaymentRegister(models.TransientModel):
     # ------------------------------------------------------------------
     # Override: pass the WHT breakdown into the created payment, and set
     # the payment's own "Amount" to the NET figure so it matches what
-    # actually moves through the bank line.
+    # actually moves through the bank line. wht_tax_ids is filled too so
+    # the payment form shows the WHT exactly as if it had been entered
+    # there.
+    #
+    # NOTE: only covers one payment per wizard run (single invoice, or
+    # several invoices with "Group Payments" on). Paying several
+    # invoices as separate payments goes through
+    # _create_payment_vals_from_batch, which this doesn't touch.
     # ------------------------------------------------------------------
     def _create_payment_vals_from_wizard(self, batch_result):
         vals = super()._create_payment_vals_from_wizard(batch_result)
@@ -450,7 +559,13 @@ class AccountPaymentRegister(models.TransientModel):
             vals['payment_base_amount'] = self.base_amount
             vals['payment_tax_amount'] = self.tax_amount
             vals['amount'] = self.total_with_tax
+            vals['wht_tax_ids'] = [Command.set(self.tax_id.ids)]
         return vals
+
+    def _create_payments(self):
+        return super(
+            AccountPaymentRegister, self.with_context(wht_from_register=True)
+        )._create_payments()
 
 
 class AccountPaymentRegisterTaxLine(models.TransientModel):
