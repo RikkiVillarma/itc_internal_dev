@@ -1,6 +1,7 @@
 from . import salary_advance
 from . import cash_advance, disbursement_voucher, request_for_payment
 from . import hr_expense
+from . import hr_expense_dv, account_move_dv
 from . import purchase_order
 from . import account_account
 from . import sales_order

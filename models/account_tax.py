@@ -8,6 +8,18 @@ class AccountTax(models.Model):
         compute='_compute_amount_display',
     )
 
+    x_vat_category = fields.Selection(
+        selection=[
+            ('vatable', 'VATable (12%)'),
+            ('zero_rated', 'Zero-Rated'),
+            ('exempt', 'VAT-Exempt'),
+        ],
+        string='BIR VAT Category',
+        help='Used on printed invoices to split sales into VATable, Zero-Rated '
+            'and VAT-Exempt. Leave empty for withholding taxes.',
+    )
+
+
     @api.depends('amount', 'amount_type')
     def _compute_amount_display(self):
         for tax in self:

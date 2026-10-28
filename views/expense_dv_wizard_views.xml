@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_expense_dv_wizard_view_form" model="ir.ui.view">
+        <field name="name">hr.expense.dv.wizard.form</field>
+        <field name="model">hr.expense.dv.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Create Disbursement Voucher">
+                <field name="company_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <group>
+                    <group string="Selected Expenses">
+                        <field name="expense_count"/>
+                        <field name="employee_count"/>
+                        <label for="date_from" string="Period"/>
+                        <div class="o_row">
+                            <field name="date_from" readonly="1"/>
+                            <span>to</span>
+                            <field name="date_to" readonly="1"/>
+                        </div>
+                        <field name="total_amount" widget="monetary" class="fw-bold"/>
+                    </group>
+                    <group string="Disbursement Voucher">
+                        <field name="payee_mode" widget="radio"/>
+                        <field name="partner_id"
+                               invisible="payee_mode != 'single'"
+                               required="payee_mode == 'single'"/>
+                        <field name="journal_id" required="1" options="{'no_create': True}"/>
+                        <field name="invoice_date"/>
+                        <field name="ref"/>
+                        <field name="grouping" widget="radio"/>
+                        <field name="attach_summary"/>
+                    </group>
+                </group>
+                <notebook>
+                    <page string="Expenses" name="expenses">
+                        <field name="expense_ids" readonly="1" force_save="1">
+                            <list create="0" delete="0">
+                                <field name="currency_id" column_invisible="1"/>
+                                <field name="date"/>
+                                <field name="employee_id"/>
+                                <field name="name"/>
+                                <field name="product_id"/>
+                                <field name="tax_ids" widget="many2many_tags" optional="hide"/>
+                                <field name="total_amount_currency" string="Total" sum="Total"
+                                       widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                            </list>
+                        </field>
+                    </page>
+                </notebook>
+                <footer>
+                    <button name="action_create_dv" type="object" string="Create DV"
+                            class="btn-primary" data-hotkey="q"/>
+                    <button name="action_export_summary" type="object" string="Export Excel"
+                            class="btn-secondary" data-hotkey="e"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary" data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

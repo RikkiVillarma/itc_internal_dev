@@ -1,4 +1,4 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools import html2plaintext, date_utils
 
@@ -36,6 +36,7 @@ class AccountMove(models.Model):
         Odoo 18 computes sequence numbers automatically via journal configuration.
         Do NOT override move.name with legacy ir.sequence inside _post().
         """
+        self._check_bir_vat_category()
         posted = super()._post(soft=soft)
         return posted
 
@@ -54,6 +55,28 @@ class AccountMove(models.Model):
                     move.x_reference_number = sale_order.name
                     move.x_invoice_type = sale_order.x_invoice_type or 'service'
         return moves
+
+    # -------------------------------------------------------------------------
+    # BIR VAT CATEGORY VALIDATION
+    # -------------------------------------------------------------------------
+    def _check_bir_vat_category(self):
+        """
+        Every customer invoice / credit note line must carry exactly one VAT tax
+        (VATable, Zero-Rated or VAT-Exempt, set via account.tax.x_vat_category)
+        so the printed invoice breakdown is always correct.
+        Withholding taxes (no VAT category) are ignored by this check.
+        """
+        for move in self.filtered(lambda m: m.move_type in ('out_invoice', 'out_refund')):
+            for line in move.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
+                vat_taxes = line.tax_ids.filtered('x_vat_category')
+                if len(vat_taxes) != 1:
+                    raise UserError(_(
+                        "Line \"%(line)s\" on %(move)s must have exactly one VAT tax "
+                        "(12%% VAT, Zero-Rated or VAT-Exempt). Found: %(found)s",
+                        line=line.name or line.product_id.display_name or '-',
+                        move=move.name or move.display_name,
+                        found=', '.join(vat_taxes.mapped('name')) or 'none',
+                    ))
 
     # -------------------------------------------------------------------------
     # BIR 2307 REPORTING LOGIC

@@ -8,6 +8,19 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='display_name']" position="after">
                 <field name="amount_display" string="Amount"/>
+                <field name="x_vat_category" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- BIR VAT Category sa tax form: VATable / Zero-Rated / VAT-Exempt -->
+    <record id="view_tax_form_bir_vat_category" model="ir.ui.view">
+        <field name="name">account.tax.form.bir.vat.category</field>
+        <field name="model">account.tax</field>
+        <field name="inherit_id" ref="account.view_tax_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='type_tax_use']" position="after">
+                <field name="x_vat_category"/>
             </xpath>
         </field>
     </record>

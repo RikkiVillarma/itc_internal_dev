@@ -8,11 +8,21 @@
       <xpath expr="//notebook" position="inside">
         <page string="BIR Permit" name="bir_permit">
           <group>
-            <group>
+            <group string="Permit">
               <field name="x_bir_permit_no"/>
               <field name="x_bir_permit_date"/>
+              <field name="x_bir_atp_no"/>
+              <field name="x_bir_atp_date"/>
             </group>
-            <group>
+            <group string="Accreditation">
+              <field name="x_bir_provider_name"/>
+              <field name="x_bir_accreditation_no"/>
+              <field name="x_bir_accreditation_validity"/>
+            </group>
+          </group>
+          <group>
+            <group string="Series Ranges">
+              <field name="x_bir_series_range"/>
               <field name="x_bir_lpo_range"/>
               <field name="x_bir_ipo_range"/>
             </group>

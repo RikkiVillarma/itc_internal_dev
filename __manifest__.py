@@ -4,7 +4,7 @@
     'category': 'Accounting',
     'summary': 'Manage Employee Salary Advances with Accounting Integration',
     'author': 'ITC - Odoo Team',
-    'depends': ['hr', 'hr_payroll', 'account', 'account_reports', 'mail', 'base', 'web', 'helpdesk', 'stock', 'purchase'],
+    'depends': ['hr', 'hr_payroll', 'hr_expense', 'account', 'account_reports', 'mail', 'base', 'web', 'helpdesk', 'stock', 'purchase'],
     'data': [
         #Security
         'security/custom_sql_report_security.xml',
@@ -47,10 +47,14 @@
         'views/purchase_journal_wizard_views.xml',
         'views/expense_sheet.xml',
         'views/expense_view.xml',
+        # Expense -> Disbursement Voucher (formerly the hr_expense_dv module)
+        'views/expense_dv_wizard_views.xml',
+        'views/hr_expense_dv_views.xml',
         'views/purchase_order.xml',
         'views/account_account_views.xml',
         'views/sales_order.xml',
         'views/account_move_views.xml',
+        'views/account_move_dv_views.xml',
         'views/sql_report_views.xml',
         'views/account_statement_menu.xml',
         'views/bir_0619e_views.xml',
