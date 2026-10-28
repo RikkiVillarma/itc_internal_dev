@@ -1,51 +1,93 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
   <!-- ===========================
+       Paper Format: Service Invoice
+  ============================ -->
+  <record id="paperformat_service_invoice" model="report.paperformat">
+    <field name="name">Service Invoice (A4)</field>
+    <field name="default" eval="False"/>
+    <field name="format">A4</field>
+    <field name="orientation">Portrait</field>
+    <field name="margin_top">50</field>
+    <field name="margin_bottom">40</field>
+    <field name="margin_left">7</field>
+    <field name="margin_right">7</field>
+    <field name="header_line" eval="False"/>
+    <field name="header_spacing">10</field>
+    <field name="dpi">90</field>
+  </record>
+
+  <!-- ===========================
        QWeb Template: Service Invoice
+       Layout follows RR No. 006-2026 Annex "B-1" (VAT Invoice)
   ============================ -->
   <template id="custom_report_service_invoice">
     <t t-call="web.html_container">
       <t t-foreach="docs" t-as="doc">
 
+        <t t-set="company" t-value="doc.company_id"/>
+        <t t-set="cp" t-value="doc.company_id.partner_id"/>
+        <t t-set="buyer" t-value="doc.partner_id"/>
+        <t t-set="ship" t-value="doc.partner_shipping_id or doc.partner_id"/>
+        <t t-set="currency_code" t-value="doc.currency_id.name or ''"/>
+        <!-- Prefix inserted before the currency unit in the amount in words -->
+        <t t-set="currency_prefix" t-value="{'SGD': 'Singaporean', 'USD': 'US'}.get(currency_code, '')"/>
+
         <!-- ================= HEADER (lalabas sa bawat page) ================= -->
-        <div class="header" style="font-family: Arial, sans-serif; padding-top: 70px; padding-bottom: 10px;">
+        <!-- Annex B-1 item 4: Registered name, VAT REG TIN + branch code, registered address -->
+        <div class="header" style="font-family: Arial, sans-serif; padding-bottom: 10px;">
           <div style="text-align:center; font-size:15px; line-height:1.3;">
 
-            <!-- Company Name -->
+            <!-- Registered Name -->
             <div style="font-size:20px; font-weight:bold; margin-bottom:3px;">
-              <t t-esc="doc.company_id.name"/>
+              <t t-esc="company.name"/>
             </div>
 
-            <!-- Company Address -->
-            <div style="max-width:600px; margin:0 auto; line-height:1.3;">
-              <t t-esc="(doc.company_id.partner_id.street or '').upper()"/>
-              <t t-if="doc.company_id.partner_id.street2">
-                , <t t-esc="doc.company_id.partner_id.street2.upper()"/>
-              </t>
-              <t t-if="doc.company_id.partner_id.city">
-                , <t t-esc="doc.company_id.partner_id.city.upper()"/>
-              </t>
-              <t t-if="doc.company_id.partner_id.state_id">
-                , <t t-esc="doc.company_id.partner_id.state_id.name.upper()"/>
-              </t>
-              <t t-if="doc.company_id.partner_id.zip">
-                <t t-esc="doc.company_id.partner_id.zip"/>
-              </t>
-            </div>
-
-            <!-- TIN -->
+            <!-- VAT REG TIN (includes branch code) -->
             <div>
               VAT REG TIN:
-              <t t-esc="doc.company_id.vat or ''"/>
+              <t t-esc="company.vat or ''"/>
             </div>
 
-            <!-- Telephone -->
-            <div>
+            <!-- Registered Business Address -->
+            <div style="max-width:650px; margin:0 auto; line-height:1.3;">
+              <t t-esc="', '.join(x for x in [cp.street, cp.street2, cp.city, cp.state_id.name, cp.zip] if x).upper()"/>
+            </div>
+
+            <!-- Telephone (optional, shown only if set) -->
+            <div t-if="company.phone or cp.phone">
               Telephone No.:
-              <t t-esc="doc.company_id.phone or doc.company_id.partner_id.phone or ''"/>
+              <t t-esc="company.phone or cp.phone"/>
             </div>
 
           </div>
+        </div>
+
+        <!-- ================= FOOTER (lalabas sa bawat page) ================= -->
+        <!-- Annex B-1 item 13: Permit to Use / ATP details -->
+        <div class="footer" style="font-family: Arial, sans-serif; font-size:9px; line-height:1.4;">
+          <table style="width:100%; border-collapse:collapse; border-top:1px solid black;">
+            <tr>
+              <td style="width:50%; vertical-align:top; padding-top:4px;">
+                Printer / Software Provider:
+                <t t-esc="company.x_bir_provider_name or ''"/><br/>
+                ATP No. / OCN:
+                <t t-esc="company.x_bir_atp_no or ''"/><br/>
+                Date Issued:
+                <t t-esc="company.x_bir_atp_date.strftime('%m/%d/%Y') if company.x_bir_atp_date else ''"/><br/>
+                BIR Permit No. (PTU / ACCN / PTI):
+                <t t-esc="company.x_bir_permit_no or ''"/>
+              </td>
+              <td style="width:50%; vertical-align:top; padding-top:4px;">
+                Accreditation No.:
+                <t t-esc="company.x_bir_accreditation_no or ''"/><br/>
+                Accreditation Validity:
+                <t t-esc="company.x_bir_accreditation_validity or ''"/><br/>
+                Approved Series Range:
+                <t t-esc="company.x_bir_series_range or ''"/>
+              </td>
+            </tr>
+          </table>
         </div>
 
         <!-- ================= PAGE CONTENT ================= -->
@@ -53,125 +95,188 @@
           <div class="page" style="font-family: Arial, sans-serif; font-size: 15px; line-height:1.3;">
             <main>
 
-              <!-- Document Header -->
-              <div style="text-align:left; font-size:18px; font-weight:bold;">
-                SERVICE INVOICE
-              </div>
+              <!-- ============================================ -->
+              <!-- Computations (classification uses account.tax.x_vat_category) -->
+              <!-- ============================================ -->
+              <t t-set="product_lines"
+                t-value="doc.invoice_line_ids.filtered(lambda l: l.display_type == 'product')"/>
 
-              <!-- Invoice Info -->
-              <div style="width:100%; font-size:13px; margin-bottom:10px; overflow:hidden;">
+              <t t-set="vatable_lines"
+                t-value="product_lines.filtered(lambda l: 'vatable' in l.tax_ids.mapped('x_vat_category'))"/>
+              <t t-set="zero_rated_lines"
+                t-value="(product_lines - vatable_lines).filtered(lambda l: 'zero_rated' in l.tax_ids.mapped('x_vat_category'))"/>
+              <!-- Exempt, plus any line without a VAT category (blocked at posting for new invoices) -->
+              <t t-set="exempt_lines"
+                t-value="product_lines - vatable_lines - zero_rated_lines"/>
 
-                <!-- LEFT: SI NO. AND BR -->
-                <div style="width:50%; float:left; padding:3px; box-sizing:border-box;">
-                  <div style="margin-bottom:2px;">
-                    <strong>SI NO.:</strong>
-                    <t t-esc="doc.name or ''"/>
-                  </div>
-                  <div>
-                    <strong>BR:</strong> BR-00000-MAIN
-                  </div>
-                </div>
+              <t t-set="vatable_sales" t-value="sum(vatable_lines.mapped('price_subtotal'))"/>
+              <t t-set="zero_rated_sales" t-value="sum(zero_rated_lines.mapped('price_subtotal'))"/>
+              <t t-set="exempt_sales" t-value="sum(exempt_lines.mapped('price_subtotal'))"/>
 
-                <!-- RIGHT: DATE, TERM -->
-                <div style="width:40%; float:right; box-sizing:border-box;">
-                  <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px;">
+              <!-- Output VAT: tax lines of VATable taxes -->
+              <t t-set="vat_amount"
+                t-value="sum(abs(l.amount_currency) for l in doc.line_ids if l.tax_line_id.x_vat_category == 'vatable')"/>
 
-                    <!-- SI DATE -->
-                    <tr>
-                      <td style="width:50%; border:1px solid black; padding:2px;">
-                        <strong>SI Date:</strong>
-                      </td>
-                      <td style="width:50%; border:1px solid black; padding:2px; text-align:center;">
-                        <t t-esc="doc.invoice_date.strftime('%m/%d/%Y') if doc.invoice_date else ''"/>
-                      </td>
-                    </tr>
+              <!-- Withholding taxes placed directly on the invoice lines (taxes without a VAT category) -->
+              <t t-set="invoice_cwt"
+                t-value="sum(abs(l.amount_currency) for l in doc.line_ids if l.tax_line_id and not l.tax_line_id.x_vat_category)"/>
 
-                    <!-- TERM -->
-                    <tr>
-                      <td style="border:1px solid black; padding:2px;">
-                        <strong>Term:</strong>
-                      </td>
-                      <td style="border:1px solid black; padding:2px; text-align:center;">
-                        <t t-esc="doc.invoice_payment_term_id.name or 'Cash'"/>
-                      </td>
-                    </tr>
+              <!-- Withholding recorded on payments -->
+              <t t-set="reconciled_payments"
+                t-value="doc._get_reconciled_payments()"/>
+              <t t-set="referenced_payments"
+                t-value="env['account.payment'].search([('memo', '=', doc.name)])"/>
+              <t t-set="all_invoice_payments"
+                t-value="reconciled_payments | referenced_payments"/>
+              <t t-set="payment_cwt"
+                t-value="sum(abs(payment.wht_amount or 0.0) for payment in all_invoice_payments)"/>
+              <t t-set="vat_withholding"
+                t-value="sum(abs(payment.payment_tax_amount or 0.0) for payment in all_invoice_payments)"/>
 
-                  </table>
-                </div>
+              <t t-set="cwt_total" t-value="invoice_cwt + payment_cwt"/>
 
-                <div style="clear:both;"/>
-              </div>
+              <!-- Annex B-1 item 9 flow -->
+              <t t-set="total_sales" t-value="vatable_sales + zero_rated_sales + exempt_sales + vat_amount"/>
+              <t t-set="net_of_vat" t-value="total_sales - vat_amount"/>
+              <t t-set="special_discount" t-value="0.0"/>
+              <t t-set="amount_due"
+                t-value="max(0.0, net_of_vat - special_discount + vat_amount - cwt_total - vat_withholding)"/>
 
-              <!-- Customer Information -->
-              <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:15px;">
+              <!-- Amount in words, with currency name (e.g. Singaporean Dollars, US Dollars) -->
+              <t t-set="unit_label" t-value="doc.currency_id.currency_unit_label or ''"/>
+              <t t-set="amount_words_raw" t-value="doc.currency_id.amount_to_text(amount_due)"/>
+              <t t-set="amount_words"
+                t-value="amount_words_raw.replace(' ' + unit_label, ' ' + currency_prefix + ' ' + unit_label, 1) if (currency_prefix and unit_label and (currency_prefix + ' ' + unit_label) not in amount_words_raw) else amount_words_raw"/>
 
-                <!-- Sold To -->
+              <!-- Line table totals -->
+              <t t-set="gross_total" t-value="sum(l.quantity * l.price_unit for l in product_lines)"/>
+              <t t-set="net_total" t-value="sum(product_lines.mapped('price_subtotal'))"/>
+              <t t-set="discount_total" t-value="gross_total - net_total"/>
+
+              <!-- ============================================ -->
+              <!-- Title (item 1) + Serial No. (item 5) + Date (item 6) -->
+              <!-- ============================================ -->
+              <table style="width:100%; border-collapse:collapse; margin-bottom:10px;">
                 <tr>
-                  <td style="border:1px solid black; padding:5px; width:25%;">
-                    <strong>Sold To:</strong>
+                  <td style="width:55%; vertical-align:bottom; padding:0;">
+                    <div style="font-size:13px; font-weight:bold; letter-spacing:2px;">SERVICE</div>
+                    <div style="font-size:30px; font-weight:bold; line-height:1;">INVOICE</div>
+                    <div style="font-size:13px; margin-top:6px;">
+                      <strong>SI NO.:</strong>
+                      <t t-esc="doc.name or ''"/>
+                    </div>
+                    <div style="font-size:13px;">
+                      <strong>BR:</strong> BR-00000-MAIN
+                    </div>
                   </td>
-                  <td style="border:1px solid black; padding:5px;" colspan="3">
-                    <t t-esc="doc.partner_id.name"/>
+                  <td style="width:45%; vertical-align:bottom; padding:0;">
+                    <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px;">
+                      <tr>
+                        <td style="width:50%; border:1px solid black; padding:3px;">
+                          <strong>Date:</strong>
+                        </td>
+                        <td style="width:50%; border:1px solid black; padding:3px; text-align:center;">
+                          <t t-esc="doc.invoice_date.strftime('%m/%d/%Y') if doc.invoice_date else ''"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:3px;">
+                          <strong>Term:</strong>
+                        </td>
+                        <td style="border:1px solid black; padding:3px; text-align:center;">
+                          <t t-esc="doc.invoice_payment_term_id.name or 'Cash'"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:3px;">
+                          <strong>Currency:</strong>
+                        </td>
+                        <td style="border:1px solid black; padding:3px; text-align:center;">
+                          <t t-esc="currency_code"/>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
+              </table>
 
-                <!-- Address - 2 row height -->
-                <tr style="height:40px;">
-                  <td style="border:1px solid black; padding:5px; width:25%; vertical-align:top;">
-                    <strong>Address:</strong>
-                  </td>
-                  <td style="border:1px solid black; padding:5px; vertical-align:top;" colspan="3">
-                    <t t-esc="doc.partner_id.contact_address"/>
+              <!-- ============================================ -->
+              <!-- Buyer Information (item 7) -->
+              <!-- ============================================ -->
+              <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:12px;">
+                <tr>
+                  <td colspan="2" style="border:1px solid black; padding:4px 5px; background:#f0f0f0;">
+                    <strong>SOLD TO:</strong>
                   </td>
                 </tr>
-
-                <!-- TIN + Business Style -->
+                <tr>
+                  <td style="border:1px solid black; padding:5px; width:28%;">
+                    <strong>Registered Name:</strong>
+                  </td>
+                  <td style="border:1px solid black; padding:5px;">
+                    <t t-esc="buyer.name or ''"/>
+                  </td>
+                </tr>
                 <tr>
                   <td style="border:1px solid black; padding:5px;">
                     <strong>TIN:</strong>
                   </td>
                   <td style="border:1px solid black; padding:5px;">
-                    <t t-esc="doc.partner_id.vat or ''"/>
+                    <t t-esc="buyer.vat or ''"/>
                   </td>
                 </tr>
-                
+                <tr style="height:40px;">
+                  <td style="border:1px solid black; padding:5px; vertical-align:top;">
+                    <strong>Business Address:</strong>
+                  </td>
+                  <td style="border:1px solid black; padding:5px; vertical-align:top;">
+                    <t t-esc="', '.join(x for x in [buyer.street, buyer.street2, buyer.city, buyer.state_id.name, buyer.zip] if x)"/>
+                  </td>
+                </tr>
                 <tr>
                   <td style="border:1px solid black; padding:5px;">
                     <strong>Business Style / Trade Name:</strong>
                   </td>
                   <td style="border:1px solid black; padding:5px;">
-                    <t t-esc="doc.partner_id.name"/>
+                    <t t-esc="buyer.name or ''"/>
                   </td>
                 </tr>
-
-                <!-- Delivery / Shipped To - 2 row height -->
                 <tr style="height:40px;">
                   <td style="border:1px solid black; padding:5px; vertical-align:top;">
                     <strong>Delivery / Shipped To:</strong>
                   </td>
-                  <td style="border:1px solid black; padding:5px; vertical-align:top;" colspan="3">
-                    <t t-esc="doc.partner_shipping_id.contact_address or ''"/>
+                  <td style="border:1px solid black; padding:5px; vertical-align:top;">
+                    <t t-esc="', '.join(x for x in [ship.street, ship.street2, ship.city, ship.state_id.name, ship.zip] if x)"/>
                   </td>
                 </tr>
-
-                <!-- Reference -->
-                <tr style="height:40px;">
-                  <td colspan="4" style="border:1px solid black; padding:5px; vertical-align:top;">
+                <tr>
+                  <td style="border:1px solid black; padding:5px;">
                     <strong>Reference:</strong>
+                  </td>
+                  <td style="border:1px solid black; padding:5px;">
                     <t t-esc="doc.x_reference_number or doc.invoice_origin or ''"/>
                   </td>
                 </tr>
-
               </table>
 
               <!-- ============================================ -->
-              <!-- Invoice Lines - FIXED HEIGHT + EMPTY ROWS -->
+              <!-- Zero-rated / VAT-exempt sale notice -->
+              <!-- ============================================ -->
+              <div t-if="zero_rated_lines or exempt_lines"
+                   style="text-align:center; font-size:16px; font-weight:bold; border:2px solid black; padding:4px; margin-bottom:8px;">
+                <t t-if="zero_rated_lines">ZERO-RATED SALE</t>
+                <t t-if="zero_rated_lines and exempt_lines"> / </t>
+                <t t-if="exempt_lines">VAT-EXEMPT SALE</t>
+              </div>
+
+              <!-- ============================================ -->
+              <!-- Details of Transaction (item 8) - FIXED HEIGHT + EMPTY ROWS -->
               <!-- ============================================ -->
               <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:2px;">
                 <thead>
                   <tr style="background:#f0f0f0;">
                     <th style="border:1px solid black; padding:5px; text-align:center; font-weight:bold;">
-                      Description
+                      Item Description / Nature of Service
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:60px; font-weight:bold;">
                       Qty
@@ -185,43 +290,44 @@
                     <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
                       Total
                     </th>
-                    <th style="border:1px solid black; padding:5px; text-align:center; width:90px; font-weight:bold;">
+                    <th style="border:1px solid black; padding:5px; text-align:center; width:80px; font-weight:bold;">
                       Discount
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
-                      Net Amount
+                      Amount
                     </th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  <t t-foreach="range(max(7, len(doc.invoice_line_ids)))" t-as="row_index">
+                  <t t-foreach="range(max(7, len(product_lines)))" t-as="row_index">
                     <tr style="border: none !important; border-top: none !important; border-bottom: none !important;">
-                      <t t-if="row_index &lt; len(doc.invoice_line_ids)">
+                      <t t-if="row_index &lt; len(product_lines)">
+                        <t t-set="line" t-value="product_lines[row_index]"/>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;">
-                          <t t-esc="doc.invoice_line_ids[row_index].name"/>
+                          <t t-esc="line.name or line.product_id.display_name or ''"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:center;">
-                          <t t-esc="'{:,.2f}'.format(doc.invoice_line_ids[row_index].quantity)"/>
+                          <t t-esc="'{:,.2f}'.format(line.quantity)"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:center;">
-                          <t t-esc="doc.invoice_line_ids[row_index].product_uom_id.name or ''"/>
+                          <t t-esc="line.product_uom_id.name or ''"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                          <t t-esc="'{:,.2f}'.format(doc.invoice_line_ids[row_index].price_unit)"/>
+                          <t t-esc="'{:,.2f}'.format(line.price_unit)"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                          <t t-esc="'{:,.2f}'.format(doc.invoice_line_ids[row_index].quantity * doc.invoice_line_ids[row_index].price_unit)"/>
+                          <t t-esc="'{:,.2f}'.format(line.quantity * line.price_unit)"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                          <t t-esc="(str(doc.invoice_line_ids[row_index].discount) + '%') if doc.invoice_line_ids[row_index].discount else '0%'"/>
+                          <t t-esc="('{:g}'.format(line.discount) + '%') if line.discount else '0%'"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
-                          <t t-esc="'{:,.2f}'.format(doc.invoice_line_ids[row_index].price_subtotal)"/>
+                          <t t-esc="'{:,.2f}'.format(line.price_subtotal)"/>
                         </td>
                       </t>
                       <t t-else="">
-                        <td t-foreach="range(7)" t-as="col" style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;"> </td>
+                        <td t-foreach="range(7)" t-as="col" style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px;"> </td>
                       </t>
                     </tr>
                   </t>
@@ -229,247 +335,176 @@
 
                 <tfoot>
                   <tr>
-                    <!-- Description -->
                     <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
                       TOTAL
                     </td>
-
-                    <!-- Qty Total -->
                     <td style="border:1px solid black; padding:5px; text-align:center; font-weight:bold;">
-                      <t t-esc="'{:,.2f}'.format(sum(doc.invoice_line_ids.mapped('quantity')))"/>
+                      <t t-esc="'{:,.2f}'.format(sum(product_lines.mapped('quantity')))"/>
                     </td>
-
-                    <!-- Unit -->
                     <td style="border:1px solid black; padding:5px; text-align:center; font-weight:bold;">
                       -
                     </td>
-
-                    <!-- Unit Price -->
                     <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
                       -
                     </td>
-
-                    <!-- Total -->
                     <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                      <t t-esc="'{:,.2f}'.format(sum(line.quantity * line.price_unit for line in doc.invoice_line_ids))"/>
+                      <t t-esc="'{:,.2f}'.format(gross_total)"/>
                     </td>
-
-                    <!-- Discount -->
                     <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                      0.00
+                      <t t-esc="'{:,.2f}'.format(discount_total)"/>
                     </td>
-
-                    <!-- Net Amount -->
                     <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
-                      <t t-esc="'{:,.2f}'.format(sum(doc.invoice_line_ids.mapped('price_subtotal')))"/>
+                      <t t-esc="'{:,.2f}'.format(net_total)"/>
                     </td>
                   </tr>
                 </tfoot>
               </table>
 
-              <!-- Breakdown Label -->
-              <div style="text-align:right; font-weight:bold; font-size:13px; margin:5px 0;">
-                Breakdown:
-              </div>
-
               <!-- ============================================ -->
-              <!-- Breakdown Table with NOTES -->
+              <!-- Summary: VAT breakdown (item 10) + Totals (items 9, 11) + SC/PWD (item 12) -->
               <!-- ============================================ -->
-              <!-- Creditable Withholding Tax and VAT Withholding -->
-              <t t-set="reconciled_payments"
-                t-value="doc._get_reconciled_payments()"/>
-
-              <t t-set="referenced_payments"
-                t-value="env['account.payment'].search([('memo', '=', doc.name)])"/>
-
-              <t t-set="all_invoice_payments"
-                t-value="reconciled_payments | referenced_payments"/>
-
-              <!-- Creditable Withholding Tax / EWT -->
-              <t t-set="amount_2307_ewt"
-                t-value="sum(abs(payment.wht_amount or 0.0) for payment in all_invoice_payments)"/>
-
-              <!-- Withholding VAT -->
-              <t t-set="amount_2307_vat"
-                t-value="sum(abs(payment.payment_tax_amount or 0.0) for payment in all_invoice_payments)"/>
-
-              <!-- Regular VAT from the invoice only -->
-              <t t-set="amount_regular_vat"
-                t-value="doc.amount_tax or 0.0"/>
-
-              <!-- Amount Due after Creditable Withholding Tax and VAT Withholding -->
-              <t t-set="amount_due"
-                t-value="max(0.0, (doc.amount_total or 0.0) - amount_2307_ewt - amount_2307_vat)"/>
-
-              <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:13px; margin-bottom:5px;">
-
-                <!-- ROW 1 -->
+              <table style="width:100%; border-collapse:collapse; font-size:13px; margin-top:8px;">
                 <tr>
-                  <!-- Amount in Words -->
-                  <td rowspan="2" style="width:65%; padding:8px; vertical-align:top; border:1px solid black; font-style:italic;">
-                    <strong>Amount in words:</strong>
-                    ***
-                    <span t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/>
-                    ***
+                  <!-- LEFT -->
+                  <td style="width:42%; vertical-align:top; padding:0 8px 0 0;">
+
+                    <!-- VAT Breakdown -->
+                    <table style="width:100%; border:1px solid black; border-collapse:collapse;">
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">VATable Sales</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right; width:45%;">
+                          <t t-esc="'{:,.2f}'.format(vatable_sales)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">VAT</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(vat_amount)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">Zero-Rated Sales</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(zero_rated_sales)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">VAT-Exempt Sales</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(exempt_sales)"/>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Amount in Words -->
+                    <div style="border:1px solid black; padding:6px; margin-top:8px; font-style:italic;">
+                      <strong>Amount in words:</strong>
+                      *** <t t-esc="amount_words"/> ***
+                    </div>
+
                   </td>
 
-                  <td style="width:18%; padding:5px; text-align:right; border:1px solid black;">
-                    VATable:
-                  </td>
+                  <!-- RIGHT -->
+                  <td style="width:58%; vertical-align:top; padding:0;">
 
-                  <td style="width:17%; padding:5px; text-align:right; border:1px solid black;">
-                    <t t-esc="'{:,.2f}'.format(doc.amount_untaxed or 0)"/>
+                    <!-- Totals -->
+                    <table style="width:100%; border:1px solid black; border-collapse:collapse;">
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <strong>Total Sales</strong> (VAT Inclusive)
+                        </td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right; width:38%;">
+                          <t t-esc="'{:,.2f}'.format(total_sales)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">Less: VAT</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(vat_amount)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">Amount: Net of VAT</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(net_of_vat)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          Less: Discount (SC/PWD/NAAC/MOV/SP)
+                        </td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(special_discount)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">Add: VAT</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(vat_amount)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">Less: Withholding Tax</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(cwt_total)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">Less: Withholding VAT</td>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          <t t-esc="'{:,.2f}'.format(vat_withholding)"/>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
+                          TOTAL AMOUNT DUE (<t t-esc="currency_code"/>)
+                        </td>
+                        <td style="border:1px solid black; padding:5px; text-align:right; font-weight:bold;">
+                          <t t-esc="'{:,.2f}'.format(amount_due)"/>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- SC / PWD / NAAC / MOV / Solo Parent -->
+                    <table style="width:100%; border:1px solid black; border-collapse:collapse; margin-top:8px; font-size:12px;">
+                      <tr>
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right; width:62%;">
+                          SC/PWD/NAAC/MOV/Solo Parent ID No.:
+                        </td>
+                        <td style="border:1px solid black; padding:4px 5px;"> </td>
+                      </tr>
+                      <tr style="height:30px;">
+                        <td style="border:1px solid black; padding:4px 5px; text-align:right;">
+                          SC/PWD/NAAC/MOV/Solo Parent Signature:
+                        </td>
+                        <td style="border:1px solid black; padding:4px 5px;"> </td>
+                      </tr>
+                    </table>
+
                   </td>
                 </tr>
-
-                <!-- ROW 2 -->
-                <tr>
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    Zero Rated:
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    0.00
-                  </td>
-                </tr>
-
-                <!-- ROW 3 -->
-                <tr>
-                  <!-- NOTES HEADER -->
-                  <td style="padding:1px; vertical-align:top; border:1px solid black;">
-                    <p style="font-size:14px; text-align:center; font-weight:bold; margin:0;">
-                      Terms and Conditions
-                    </p>
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    Exempt:
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    0.00
-                  </td>
-                </tr>
-
-                <!-- ROW 4 -->
-                <tr>
-                  <!-- NOTES VALUE - MERGED WITH ROW 5 -->
-                  <td rowspan="4" style="padding:8px; vertical-align:top; border:1px solid black;">
-                    <p style="font-size:13px; text-align:left; margin:0;">
-                        1. Our liability ceases after rendition of services.<br/>
-                        2. This Invoice is payable on demand, unless otherwise agreed upon.<br/>
-                        3. Interest will be charged on all overdue accounts.<br/>
-                        4. In case of non-payment, the court of service provider will have jurisdiction and the client hereby agrees to pay attorney's fees and court costs resulting from.
-                    </p>
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    VAT:
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    <t t-esc="'{:,.2f}'.format(amount_regular_vat)"/>
-                  </td>
-                </tr>
-                
-                <!-- ROW 5 -->
-                <tr>
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    Less: 2307 EWT:
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    <t t-esc="'{:,.2f}'.format(amount_2307_ewt or 0.0)"/>
-                  </td>
-                </tr>
-                
-                <!-- ROW 6 -->
-                <tr>
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    Less: 2307 VAT:
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black;">
-                    <t t-esc="'{:,.2f}'.format(amount_2307_vat or 0.0)"/>
-                  </td>
-                </tr>
-
-                <!-- ROW 7 -->
-                <tr>
-                  <td style="padding:5px; text-align:right; border:1px solid black; font-weight:bold;">
-                    Amount Due:
-                  </td>
-
-                  <td style="padding:5px; text-align:right; border:1px solid black; font-weight:bold;">
-                    <t t-esc="'{:,.2f}'.format((doc.amount_total or 0.0) - amount_2307_ewt - amount_2307_vat)"/>
-                  </td>
-                </tr>
-
               </table>
 
               <!-- ============================================ -->
-              <!-- Signature Section -->
+              <!-- Terms and Conditions -->
               <!-- ============================================ -->
-              <div style="width:100%; font-size:13px; text-align:left; margin-top:20px;">
-
-                <!-- Prepared By -->
-                <div style="display:inline-block; width:31%; vertical-align:top; margin-right:2%;">
-                  Prepared By:<br/>
-                  <div style="width:80%; border-bottom:1px solid black; height:40px;"/>
-                  <div style="font-size:13px; margin-top:3px;">
-                    Signature over Printed Name
-                  </div>
-                  <div style="font-size:13px;">
-                    Date:
-                  </div>
-                </div>
-
-                <!-- Checked/Approved By -->
-                <div style="display:inline-block; width:31%; vertical-align:top; margin-right:2%;">
-                  Checked/Approved By:<br/>
-                  <div style="width:80%; border-bottom:1px solid black; height:40px;"/>
-                  <div style="font-size:13px; margin-top:3px;">
-                    Signature over Printed Name
-                  </div>
-                  <div style="font-size:13px;">
-                    Date:
-                  </div>
-                </div>
-
-                <!-- Received By -->
-                <div style="display:inline-block; width:31%; vertical-align:top;">
-                  Received By:<br/>
-                  <div style="width:80%; border-bottom:1px solid black; height:40px;"/>
-                  <div style="font-size:13px; margin-top:3px;">
-                    Signature over Printed Name
-                  </div>
-                  <div style="font-size:13px;">
-                    Date:
-                  </div>
-                </div>
-
-              </div>
+              <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:12px; margin-top:8px;">
+                <tr>
+                  <td style="border:1px solid black; padding:3px; text-align:center; font-weight:bold; background:#f0f0f0;">
+                    Terms and Conditions
+                  </td>
+                </tr>
+                <tr>
+                  <td style="border:1px solid black; padding:6px 8px;">
+                    1. Our liability ceases after rendition of services.<br/>
+                    2. This Invoice is payable on demand, unless otherwise agreed upon.<br/>
+                    3. Interest will be charged on all overdue accounts.<br/>
+                    4. In case of non-payment, the court of service provider will have jurisdiction and the client hereby agrees to pay attorney's fees and court costs resulting from.
+                  </td>
+                </tr>
+              </table>
 
             </main>
-
-            <!-- ================= FOOTER (lalabas sa bawat page) ================= -->
-            <div class="footer" style="font-family: Arial, sans-serif;">
-
-              <!-- Printed By Info -->
-              <div style="font-size:10px; text-align:left; line-height:1.3; margin-bottom:5px;">
-                Printed By: E-taxpoint Software Solutions Corp. (Open Edition - Tax Based Accounting System)<br/>
-                Acknowledgment Certificate No:<br/>
-                Acknowledgment Certificate Date Issued:<br/>
-                Permitted Series Range: SA-000000000001 - SA-999999999999
-              </div>
-
-              <!-- Disclaimer -->
-              <div style="text-align:center; font-size:16px; font-weight:bold;">
-                THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX
-              </div>
-
-            </div>
-
           </div>
         </div>
       </t>
@@ -485,6 +520,7 @@
     <field name="report_type">qweb-pdf</field>
     <field name="report_name">itc_internal_dev.custom_report_service_invoice</field>
     <field name="print_report_name">'Service Invoice - %s' % (object.name)</field>
+    <field name="paperformat_id" ref="paperformat_service_invoice"/>
     <field name="binding_model_id" ref="account.model_account_move"/>
     <field name="binding_type">report</field>
   </record>

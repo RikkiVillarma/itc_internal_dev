@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List: DV column. Inheriting the base list also reaches the
+         "My Expenses" / "All Expenses" lists that derive from it. -->
+    <record id="hr_expense_view_expenses_analysis_tree_inherit_dv" model="ir.ui.view">
+        <field name="name">hr.expense.list.inherit.dv</field>
+        <field name="model">hr.expense</field>
+        <field name="inherit_id" ref="hr_expense.hr_expense_view_expenses_analysis_tree"/>
+        <field name="arch" type="xml">
+            <field name="sheet_id" position="after">
+                <field name="dv_move_id" optional="show" readonly="1"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- Form: show the DV once linked -->
+    <record id="hr_expense_view_form_inherit_dv" model="ir.ui.view">
+        <field name="name">hr.expense.form.inherit.dv</field>
+        <field name="model">hr.expense</field>
+        <field name="inherit_id" ref="hr_expense.hr_expense_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet//group/field[@name='date']" position="after">
+                <field name="dv_move_id" invisible="not dv_move_id" readonly="1"/>
+                <field name="dv_payment_state" invisible="not dv_move_id" widget="badge"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Search: filters + group by DV -->
+    <record id="hr_expense_view_search_inherit_dv" model="ir.ui.view">
+        <field name="name">hr.expense.search.inherit.dv</field>
+        <field name="model">hr.expense</field>
+        <field name="inherit_id" ref="hr_expense.hr_expense_view_search"/>
+        <field name="arch" type="xml">
+            <filter name="refused" position="after">
+                <separator/>
+                <filter string="Ready for DV" name="dv_available"
+                        domain="[('dv_move_id', '=', False), ('sheet_id', '=', False)]"/>
+                <filter string="On a DV" name="dv_linked" domain="[('dv_move_id', '!=', False)]"/>
+            </filter>
+            <filter name="status" position="after">
+                <filter string="Disbursement Voucher" name="group_dv" context="{'group_by': 'dv_move_id'}"/>
+            </filter>
+        </field>
+    </record>
+
+    <!-- Action menu entries on the expense list -->
+    <record id="action_server_hr_expense_create_dv" model="ir.actions.server">
+        <field name="name">Create Disbursement Voucher</field>
+        <field name="model_id" ref="hr_expense.model_hr_expense"/>
+        <field name="binding_model_id" ref="hr_expense.model_hr_expense"/>
+        <field name="binding_view_types">list</field>
+        <field name="groups_id" eval="[(4, ref('account.group_account_invoice'))]"/>
+        <field name="state">code</field>
+        <field name="code">action = records.action_open_dv_wizard()</field>
+    </record>
+
+    <record id="action_server_hr_expense_export_dv_summary" model="ir.actions.server">
+        <field name="name">Export Expense Summary (Excel)</field>
+        <field name="model_id" ref="hr_expense.model_hr_expense"/>
+        <field name="binding_model_id" ref="hr_expense.model_hr_expense"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">action = records.action_export_dv_summary()</field>
+    </record>
+</odoo>
