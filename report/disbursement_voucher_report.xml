@@ -2,8 +2,11 @@
 <odoo>
 
   <!-- ================= SHARED BODY ================= -->
-  <!-- Expects: company, partner, payee_ref, voucher_no, voucher_date, amount, amount_words, particulars, move -->
+  <!-- Expects: company, partner, payee_ref, voucher_no, voucher_date, release_date, currency, amount, amount_words, particulars, move
+       All amounts are in `currency` (the bill's / payment's own currency), never converted to PHP. -->
   <template id="disbursement_voucher_body">
+    <!-- Number format follows the currency's decimal places -->
+    <t t-set="fmt" t-value="lambda v: ('{:,.%sf}' % currency.decimal_places).format(v or 0.0)"/>
     <div class="page" style="font-family: Arial; font-size:16pt; padding:30px;">
       <div style="width:100%; margin-bottom:30px;">
         <div style="display:inline-block; width:60%; vertical-align:top;">
@@ -38,11 +41,13 @@
               </tr>
               <tr>
                 <td style="border:1px solid black; padding:5px;">Voucher Amount</td>
-                <td style="border:1px solid black; padding:5px;"><t t-esc="'{:,.2f}'.format(amount)"/></td>
+                <td style="border:1px solid black; padding:5px;">
+                  <t t-esc="currency.name"/> <t t-esc="fmt(amount)"/>
+                </td>
               </tr>
               <tr>
                 <td style="border:1px solid black; padding:5px;">Released Date</td>
-                <td style="border:1px solid black; padding:5px;"></td>
+                <td style="border:1px solid black; padding:5px;"><t t-esc="release_date or ''"/></td>
               </tr>
             </table>
           </td>
@@ -63,32 +68,41 @@
         </tr>
       </table>
 
-      <!-- ACCOUNTING TABLE -->
-      <t t-set="lines" t-value="move.line_ids.filtered(lambda l: l.debit or l.credit) if move else []"/>
+      <!-- ACCOUNTING TABLE
+           Debit/Credit come from amount_currency (the line's amount in the document
+           currency): positive = debit, negative = credit. For PHP documents this is
+           identical to the old debit/credit columns. -->
+      <t t-set="lines" t-value="move.line_ids.filtered(lambda l: not currency.is_zero(l.amount_currency)) if move else []"/>
+      <t t-set="total_debit" t-value="sum(l.amount_currency for l in lines if l.amount_currency &gt; 0)"/>
+      <t t-set="total_credit" t-value="sum(-l.amount_currency for l in lines if l.amount_currency &lt; 0)"/>
       <table style="width:100%; border:1px solid black; border-collapse:collapse;">
         <thead>
           <tr>
             <th style="border:1px solid black;">Account Code</th>
             <th style="border:1px solid black;">Account Title</th>
-            <th style="border:1px solid black;">Debit</th>
-            <th style="border:1px solid black;">Credit</th>
+            <th style="border:1px solid black;">Debit (<t t-esc="currency.name"/>)</th>
+            <th style="border:1px solid black;">Credit (<t t-esc="currency.name"/>)</th>
           </tr>
         </thead>
         <tbody>
           <tr t-foreach="lines" t-as="line">
             <td style="border:1px solid black;"><t t-esc="line.account_id.code"/></td>
             <td style="border:1px solid black;"><t t-esc="line.account_id.name"/></td>
-            <td style="border:1px solid black; text-align:right;"><t t-esc="'{:,.2f}'.format(line.debit)"/></td>
-            <td style="border:1px solid black; text-align:right;"><t t-esc="'{:,.2f}'.format(line.credit)"/></td>
+            <td style="border:1px solid black; text-align:right;">
+              <t t-esc="fmt(line.amount_currency if line.amount_currency &gt; 0 else 0.0)"/>
+            </td>
+            <td style="border:1px solid black; text-align:right;">
+              <t t-esc="fmt(-line.amount_currency if line.amount_currency &lt; 0 else 0.0)"/>
+            </td>
           </tr>
           <tr>
             <td style="border:1px solid black;"></td>
             <td style="border:1px solid black; text-align:right; font-weight:bold;">Total Amount:</td>
             <td style="border:1px solid black; text-align:right; font-weight:bold;">
-              <t t-esc="'{:,.2f}'.format(sum(l.debit for l in lines))"/>
+              <t t-esc="fmt(total_debit)"/>
             </td>
             <td style="border:1px solid black; text-align:right; font-weight:bold;">
-              <t t-esc="'{:,.2f}'.format(sum(l.credit for l in lines))"/>
+              <t t-esc="fmt(total_credit)"/>
             </td>
           </tr>
         </tbody>
@@ -118,6 +132,8 @@
           <t t-set="payee_ref" t-value="doc.move_id.x_payee_ref"/>
           <t t-set="voucher_no" t-value="doc.name"/>
           <t t-set="voucher_date" t-value="doc.date"/>
+          <t t-set="release_date" t-value="doc.release_date"/>
+          <t t-set="currency" t-value="doc.currency_id"/>
           <t t-set="amount" t-value="doc.amount"/>
           <t t-set="amount_words" t-value="doc.currency_id.amount_to_text(doc.amount)"/>
           <t t-set="particulars" t-value="doc.memo"/>
@@ -127,19 +143,28 @@
     </t>
   </template>
 
-  <!-- ================= WRAPPER: account.move (manual JEs) ================= -->
+  <!-- ================= WRAPPER: account.move (bills / manual JEs) ================= -->
   <template id="custom_disbursement_voucher_move_report">
     <t t-call="web.html_container">
       <t t-foreach="docs" t-as="doc">
-        <!-- Amount released = credits to cash/bank; falls back to total debit -->
-        <t t-set="cash_credit" t-value="sum(doc.line_ids.filtered(lambda l: l.account_id.account_type == 'asset_cash').mapped('credit'))"/>
-        <t t-set="dv_amount" t-value="cash_credit or sum(doc.line_ids.mapped('debit'))"/>
+        <!-- Amount released = credits to cash/bank; falls back to total debit.
+             Both taken from amount_currency, i.e. in the document's own currency. -->
+        <t t-set="cash_credit" t-value="sum(-l.amount_currency for l in doc.line_ids if l.account_id.account_type == 'asset_cash' and l.amount_currency &lt; 0)"/>
+        <t t-set="dv_amount" t-value="cash_credit or sum(l.amount_currency for l in doc.line_ids if l.amount_currency &gt; 0)"/>
+        <!-- Release date comes from the payment(s): for a vendor bill, the payments
+             registered against it (matched_payment_ids); for a payment's own entry,
+             origin_payment_id. Manual JEs have neither, so it stays blank.
+             If a bill was paid in several releases, the latest date is shown. -->
+        <t t-set="dv_payments" t-value="doc.matched_payment_ids | doc.origin_payment_id"/>
+        <t t-set="dv_release_dates" t-value="dv_payments.filtered(lambda p: p.state != 'canceled' and p.release_date).mapped('release_date')"/>
         <t t-call="itc_internal_dev.disbursement_voucher_body">
           <t t-set="company" t-value="doc.company_id"/>
           <t t-set="partner" t-value="doc.partner_id or doc.line_ids.mapped('partner_id')[:1]"/>
           <t t-set="payee_ref" t-value="doc.x_payee_ref"/>
           <t t-set="voucher_no" t-value="doc.name"/>
           <t t-set="voucher_date" t-value="doc.date"/>
+          <t t-set="release_date" t-value="max(dv_release_dates) if dv_release_dates else False"/>
+          <t t-set="currency" t-value="doc.currency_id"/>
           <t t-set="amount" t-value="dv_amount"/>
           <t t-set="amount_words" t-value="doc.currency_id.amount_to_text(dv_amount)"/>
           <t t-set="particulars" t-value="doc.ref or doc.narration"/>

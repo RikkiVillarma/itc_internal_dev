@@ -1,21 +1,50 @@
 <odoo>
+    <!-- One row of Part III (used by both tables) -->
+    <template id="report_bir_2307_row">
+        <!-- month % 3: 1 -> 1st month, 2 -> 2nd month, 0 -> 3rd month of the quarter -->
+        <t t-set="month_left" t-value="{1: 417, 2: 557, 0: 692}[l['month'] % 3]"/>
+        <!-- Long WHT descriptions wrap to 2 lines at a smaller size so they stay inside the 25px row -->
+        <div t-attf-style="position:absolute; top:#{row_top - 4}px; left:38px; width:290px; height:24px; font-size:6.5pt; line-height:1.15; z-index:1; white-space:normal; overflow:hidden;">
+            <t t-esc="l['description']"/>
+        </div>
+        <div t-attf-style="position:absolute; top:#{row_top}px; left:335px; font-size:9pt; z-index:1; white-space:nowrap;">
+            <t t-esc="l['atc']"/>
+        </div>
+        <div t-attf-style="position:absolute; top:#{row_top}px; left:#{month_left}px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+        </div>
+        <div t-attf-style="position:absolute; top:#{row_top}px; left:820px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
+        </div>
+        <div t-attf-style="position:absolute; top:#{row_top}px; left:980px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
+            <t t-esc="'{:,.2f}'.format(l['tax_withheld'] or 0.00)"/>
+        </div>
+    </template>
+
     <template id="report_bir_2307_overlay">
         <t t-call="web.html_container">
             <t t-foreach="docs" t-as="o">
-                <t t-foreach="o.get_2307_details()" t-as="line">
+                <!-- Compute once per bill; one 2307 page per payor -->
+                <t t-set="details" t-value="o.get_2307_details()"/>
+                <t t-foreach="details" t-as="corp">
+                    <t t-set="payor" t-value="corp['corporation']"/>
+                    <t t-set="ewt_lines" t-value="corp.get('lines') or []"/>
+                    <t t-set="biz_lines" t-value="corp.get('business_lines') or []"/>
                     <main>
-                                <div style="position:absolute; top:0; left:0; width:300mm; height:450mm; z-index:0;
-                                            background-image:url('https://res.cloudinary.com/dnb0wqyr8/image/upload/v1783562580/BIR2307_en6bpx.jpg');
-                                            background-size:100% 100%;
-                                            background-repeat:no-repeat;
-                                            background-position:top left;"></div>
-                            <!-- ============ PERIOD ============ -->
-                        <t t-set="from_str" t-value="o.date.strftime('%m %d %Y')"/>
-                        <t t-set="to_str" t-value="o.date.strftime('%m %d %Y')"/>
-                        <div style="position:absolute; top:197px; left:297px; font-size:15pt; z-index:1; letter-spacing: 5px; white-space:nowrap;">
+                        <div style="position:absolute; top:0; left:0; width:300mm; height:450mm; z-index:0;
+                                    background-image:url('https://res.cloudinary.com/dnb0wqyr8/image/upload/v1783562580/BIR2307_en6bpx.jpg');
+                                    background-size:100% 100%;
+                                    background-repeat:no-repeat;
+                                    background-position:top left;"></div>
+
+                        <!-- ============ PERIOD ============ -->
+                        <!-- Whole calendar month of the bill, computed in get_2307_details() -->
+                        <t t-set="from_str" t-value="corp['period_from'].strftime('%m %d %Y')"/>
+                        <t t-set="to_str" t-value="corp['period_to'].strftime('%m %d %Y')"/>
+                        <div style="position:absolute; top:197px; left:297px; font-size:15pt; z-index:1; letter-spacing:5px; white-space:nowrap;">
                             <t t-esc="from_str"/>
                         </div>
-                        <div style="position:absolute; top:197px; left:750px; font-size:15pt; z-index:1; letter-spacing: 5px; white-space:nowrap;">
+                        <div style="position:absolute; top:197px; left:750px; font-size:15pt; z-index:1; letter-spacing:5px; white-space:nowrap;">
                             <t t-esc="to_str"/>
                         </div>
 
@@ -30,112 +59,52 @@
                             <t t-esc="', '.join(filter(None, [o.partner_id.street, o.partner_id.street2, o.partner_id.city]))"/>
                         </div>
                         <div style="position:absolute; top:359px; left:1005px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
-                            <t t-esc="o.partner_id.zip"/>
+                            <t t-esc="o.partner_id.zip or ''"/>
                         </div>
+
                         <!-- ============ PART II: PAYOR ============ -->
                         <div style="position:absolute; top:465px; left:390px; font-size:15pt; z-index:1; letter-spacing:14px; white-space:nowrap;">
-                            <t t-esc="line['corporation'].vat or '0000'"/>
+                            <t t-esc="payor.vat or '0000'"/>
                         </div>
-
                         <div style="position:absolute; top:512px; left:65px; font-size:11pt; z-index:1; white-space:nowrap;">
-                            <t t-esc="line['corporation'].name"/>
+                            <t t-esc="payor.name"/>
                         </div>
-
                         <div style="position:absolute; top:565px; left:65px; width:714.4px; font-size:11pt; z-index:1; white-space:nowrap;">
-                            <t t-esc="', '.join(filter(None, [line['corporation'].street, line['corporation'].street2, line['corporation'].city]))"/>
+                            <t t-esc="', '.join(filter(None, [payor.street, payor.street2, payor.city]))"/>
                         </div>
-
                         <div style="position:absolute; top:567px; left:1005px; font-size:15pt; z-index:1; letter-spacing:13px; white-space:nowrap;">
-                            <t t-esc="o.company_id.zip or ''"/>
+                            <t t-esc="payor.zip or o.company_id.zip or ''"/>
                         </div>
 
-                        <t t-foreach="o.get_2307_details()" t-as="corp">
-                            <t t-if="line['corporation'] == corp['corporation']">
-                                <t t-foreach="corp['lines']" t-as="l">
-                                    <t t-if="l_index &lt; 10">
-                                        <t t-set="row_top" t-value="670 + (l_index * 25)"/>
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:38px; width:300px; font-size:9pt; z-index:1; white-space:nowrap;">
-                                            <t t-esc="l['description']"/>
-                                        </div>
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:335px; font-size:9pt; z-index:1; white-space:nowrap;">
-                                            <t t-esc="l['atc']"/>
-                                        </div>
-                                        <!--======================MONTH====================-->
-                                        <t t-if="l['month'] in [1,4,7,10]">
-                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:417px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                                <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                                            </div>
-                                        </t>
-                                        <t t-if="l['month'] in [2,5,8,11]">
-                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:557px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                                <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
-                                            </div>
-                                        </t>
-                                        <t t-if="l['month'] in [3,6,9,12]">
-                                            <div t-attf-style="position:absolute; top:#{row_top}px; left:692px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                                <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
-                                            </div>
-                                        </t>
-                                        <!--=================== TOTALS AND WHTAX COLUMN=================== -->
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:820px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
-                                        </div>
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:980px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                            <t t-esc="'{:,.2f}'.format(l['tax_withheld'] or 0.00)"/>
-                                        </div>
-                                    </t>
+                        <!-- ============ PART III: TABLE 1 - Expanded Withholding Tax ============ -->
+                        <t t-foreach="ewt_lines" t-as="l">
+                            <t t-if="l_index &lt; 10">
+                                <t t-call="itc_internal_dev.report_bir_2307_row">
+                                    <t t-set="row_top" t-value="670 + (l_index * 25)"/>
                                 </t>
-                                <div style="position:absolute; top:915px; left:820px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
-                                    <t t-esc="'{:,.2f}'.format(corp['gross_amount'])"/>
-                                </div>
-                                <div style="position:absolute; top:915px; left:980px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
-                                    <t t-esc="'{:,.2f}'.format(corp['tax_withheld'])"/>
-                                </div>
                             </t>
                         </t>
-                                        <!-- ============ PART III: TABLE 2 - Business/Excise Tax ============ -->
-                        <t t-foreach="o.get_2307_details()" t-as="corpII">
-                            <t t-foreach="corpII['lines']" t-as="l">
-                                <t t-if="l_index &lt; 9">
+                        <div style="position:absolute; top:915px; left:820px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                            <t t-esc="'{:,.2f}'.format(corp.get('gross_amount') or 0.00)"/>
+                        </div>
+                        <div style="position:absolute; top:915px; left:980px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                            <t t-esc="'{:,.2f}'.format(corp.get('tax_withheld') or 0.00)"/>
+                        </div>
+
+                        <!-- ============ PART III: TABLE 2 - Business Tax (Government & Private) ============ -->
+                        <t t-foreach="biz_lines" t-as="l">
+                            <t t-if="l_index &lt; 9">
+                                <t t-call="itc_internal_dev.report_bir_2307_row">
                                     <t t-set="row_top" t-value="980 + (l_index * 25)"/>
-                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:38px; width:300px; font-size:9pt; z-index:1; white-space:nowrap;">
-                                        <t t-esc="l['description']"/>
-                                    </div>
-                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:335px; font-size:9pt; z-index:1; white-space:nowrap;">
-                                        <t t-esc="l['atc']"/>
-                                    </div>
-                                    <!-- ============================= MONTHS =========================================-->
-                                    <t t-if="l['month'] in [1,4,7,10]">
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:417px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'])"/>
-                                        </div>
-                                    </t>
-                                    <t t-if="l['month'] in [2,5,8,11]">
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:557px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
-                                        </div>
-                                    </t>
-                                    <t t-if="l['month'] in [3,6,9,12]">
-                                        <div t-attf-style="position:absolute; top:#{row_top}px; left:692px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                            <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
-                                        </div>
-                                    </t>
-                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:820px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                        <t t-esc="'{:,.2f}'.format(l['gross_amount'] or 0.00)"/>
-                                    </div>
-                                    <div t-attf-style="position:absolute; top:#{row_top}px; left:980px; width:120px; font-size:9pt; z-index:1; text-align:right; white-space:nowrap;">
-                                        <t t-esc="'{:,.2f}'.format(l['tax_withheld'] or 0.00)"/>
-                                    </div>
                                 </t>
                             </t>
-                            <!-- ===============================TOTALS II==================================== -->
-                            <div style="position:absolute; top:1225px; left:820px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
-                                <t t-esc="'{:,.2f}'.format(corpII['gross_amount'])"/>
-                            </div>
-                            <div style="position:absolute; top:1225px; left:980px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
-                                <t t-esc="'{:,.2f}'.format(corpII['tax_withheld'])"/>
-                            </div>
                         </t>
+                        <div style="position:absolute; top:1225px; left:820px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                            <t t-esc="'{:,.2f}'.format(corp.get('business_gross_amount') or 0.00)"/>
+                        </div>
+                        <div style="position:absolute; top:1225px; left:980px; width:120px; font-size:9pt; font-weight:bold; z-index:1; text-align:right; white-space:nowrap;">
+                            <t t-esc="'{:,.2f}'.format(corp.get('business_tax_withheld') or 0.00)"/>
+                        </div>
                     </main>
                 </t>
             </t>

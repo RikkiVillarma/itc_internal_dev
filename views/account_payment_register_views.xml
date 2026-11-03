@@ -2,7 +2,7 @@
 <odoo>
 
     <!-- ══════════════════════════════════════════════════════════════
-         account.payment.register wizard — tax breakdown inherit
+         account.payment.register wizard — withholding tax inherit
     ══════════════════════════════════════════════════════════════════ -->
     <record id="view_account_payment_register_tax_inherit" model="ir.ui.view">
         <field name="name">account.payment.register.tax.inherit</field>
@@ -10,41 +10,33 @@
         <field name="inherit_id" ref="account.view_account_payment_register_form"/>
         <field name="arch" type="xml">
 
-            <!--
-                1. Inject tax_id on the SAME ROW as amount/currency.
-                   The amount row in Odoo 18 register wizard is:
-                     <field name="amount" .../>   (currency_id is its monetary widget sibling)
-                   We add tax_id after the amount field — still inside the group,
-                   so it appears on the same row as a second label+field pair.
-            -->
+            <!-- 1. Withholding tax picker right after the amount field -->
             <xpath expr="//field[@name='amount']" position="after">
                 <field name="tax_id"
+                       string="Withholding Tax"
                        options="{'no_create': True}"
                        placeholder="None"/>
             </xpath>
 
-            <!--
-                2. Breakdown panel goes just before </form> — i.e. after the footer,
-                   at the very bottom of the modal body, spanning full width.
-            -->
+            <!-- 2. Breakdown panel at the bottom of the modal body -->
             <xpath expr="//footer" position="before">
                 <div invisible="not tax_id" class="o_payment_tax_breakdown border-top pt-3 mt-1 mx-0">
 
                     <!-- Section label -->
-                    <div class="o_horizontal_separator mb-2">Tax Breakdown</div>
+                    <div class="o_horizontal_separator mb-2">Withholding Tax Breakdown</div>
 
                     <!-- Summary cards -->
                     <div class="d-flex gap-2 mb-2">
 
                         <div class="flex-fill border rounded p-2 text-center bg-100">
-                            <div class="text-muted small mb-1">Base Amount</div>
+                            <div class="text-muted small mb-1">Amount (Gross)</div>
                             <div class="fw-bold">
                                 <field name="base_amount" nolabel="1"/>
                             </div>
                         </div>
 
                         <div class="flex-fill border rounded p-2 text-center bg-100">
-                            <div class="text-muted small mb-1">Tax Amount</div>
+                            <div class="text-muted small mb-1">Less: Withholding Tax</div>
                             <div class="fw-bold text-danger">
                                 <field name="tax_amount" nolabel="1"/>
                             </div>
@@ -52,7 +44,7 @@
 
                         <div class="flex-fill border rounded p-2 text-center"
                              style="background-color: var(--o-color-primary, #714B67); color: #fff;">
-                            <div class="small mb-1" style="opacity:0.85">Total (incl. Tax)</div>
+                            <div class="small mb-1" style="opacity:0.85">Net Amount Received</div>
                             <div class="fw-bold">
                                 <field name="total_with_tax" nolabel="1"/>
                             </div>
@@ -63,9 +55,9 @@
                     <!-- Per-tax line breakdown -->
                     <field name="tax_breakdown_ids" nolabel="1" readonly="1">
                         <list create="false" delete="false">
-                            <field name="name" string="Tax Component"/>
-                            <field name="base" string="Base"/>
-                            <field name="amount" string="Tax Amount"/>
+                            <field name="name" string="Withholding Tax"/>
+                            <field name="base" string="WHT Base (excl. VAT)"/>
+                            <field name="amount" string="WHT Amount"/>
                             <field name="account_id" string="Tax Account" optional="show"/>
                             <field name="currency_id" column_invisible="True"/>
                         </list>
@@ -74,10 +66,13 @@
                     <!-- Journal entry note -->
                     <div class="alert alert-info mt-2 mb-0 py-2 px-3">
                         <i class="fa fa-info-circle me-1"/>
+                        <strong>Keep Amount at the full invoice total</strong> — the withholding
+                        tax is deducted automatically.
+                        <br/>
                         <strong>Journal Entry:</strong>
-                        Bank/Cash = <strong>total (incl. tax)</strong> —
-                        Receivable/Payable = <strong>base amount</strong> —
-                        separate tax line posts to the tax account.
+                        Bank/Cash = <strong>net amount received</strong> —
+                        Withholding tax account = <strong>WHT amount</strong> —
+                        Receivable/Payable = <strong>gross amount</strong>.
                     </div>
 
                 </div>
@@ -87,27 +82,24 @@
     </record>
 
     <!-- ══════════════════════════════════════════════════════════════
-         account.payment form — show tax info on posted payment
+         account.payment form — show withholding tax on the payment
     ══════════════════════════════════════════════════════════════════ -->
     <record id="view_account_payment_tax_info_inherit" model="ir.ui.view">
         <field name="name">account.payment.tax.info.inherit</field>
         <field name="model">account.payment</field>
         <field name="inherit_id" ref="account.view_account_payment_form"/>
         <field name="arch" type="xml">
- 
-            <!--
-                Append Tax Summary at the very end of the <sheet> block
-                so it appears below all other fields, before the chatter.
-            -->
+
+            <!-- Withholding tax summary at the end of the sheet, before the chatter -->
             <xpath expr="//sheet" position="inside">
-                <group invisible="not payment_tax_id" string="Tax Summary"
+                <group invisible="not payment_tax_id" string="Withholding Tax Summary"
                        class="mt-3 border-top pt-3">
-                    <field name="payment_tax_id" string="Applied Tax" readonly="1"/>
-                    <field name="payment_base_amount" string="Base (excl. Tax)" readonly="1"/>
-                    <field name="payment_tax_amount" string="Tax Amount" readonly="1"/>
+                    <field name="payment_tax_id" string="Withholding Tax" readonly="1"/>
+                    <field name="payment_base_amount" string="Gross Amount (AR cleared)" readonly="1"/>
+                    <field name="payment_tax_amount" string="WHT Amount" readonly="1"/>
                 </group>
             </xpath>
- 
+
         </field>
     </record>
 </odoo>

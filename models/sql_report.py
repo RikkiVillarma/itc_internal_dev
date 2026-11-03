@@ -7,6 +7,7 @@ import xlsxwriter
 import json
 from datetime import date, datetime
 from markupsafe import Markup
+from decimal import Decimal
 
 _logger = logging.getLogger(__name__)
 
@@ -266,7 +267,7 @@ SQL_QUERIES = {
         WHERE a.invoice_date BETWEEN %s AND %s;
     """,
     'sales_journal': """
-        SELECT 		
+        SELECT
             a.invoice_date AS "DATE",
             r.name AS "NAME OF CLIENT",
             r.contact_address_complete AS "ADDRESS",
@@ -274,51 +275,52 @@ SQL_QUERIES = {
             a.name AS "PRIMARY",
             a.ref AS "SUPPLEMENTARY",
             '' AS "OTHERS",
+            -- *_signed fields are in company currency (PHP), at the rate the entry was posted
             a.amount_total_signed AS "GROSS AMOUNT",
             '' AS "DISCOUNT AMOUNT",
-            a.amount_total AS "SALES AMOUNT",
-            CASE 
-                WHEN a.x_invoice_type = 'consu' THEN a.amount_untaxed 
-                ELSE 0 
+            a.amount_total_signed AS "SALES AMOUNT",
+            CASE
+                WHEN a.x_invoice_type = 'consu' THEN a.amount_untaxed_signed
+                ELSE 0
             END AS "GOODS DOMESTIC SALES",
-            CASE 
-                WHEN a.x_invoice_type = 'service' THEN a.amount_untaxed 
-                ELSE 0 
+            CASE
+                WHEN a.x_invoice_type = 'service' THEN a.amount_untaxed_signed
+                ELSE 0
             END AS "SERVICE DOMESTIC SALES",
-            a.amount_untaxed AS "TOTAL DOMESTIC SALES",
-            case 
-                when a.amount_tax > 0 then a.amount_untaxed 
-                else 0
-            end AS "PRIVATE",
+            a.amount_untaxed_signed AS "TOTAL DOMESTIC SALES",
+            CASE
+                WHEN a.amount_tax_signed > 0 THEN a.amount_untaxed_signed
+                ELSE 0
+            END AS "PRIVATE",
             0 AS "GOVERNMENT",
             ABS(
                 COALESCE(
-                    CASE WHEN a.x_invoice_type = 'service' THEN a.amount_untaxed ELSE 0 END, 
+                    CASE WHEN a.x_invoice_type = 'service' THEN a.amount_untaxed_signed ELSE 0 END,
                     0
                 )
                 -
                 COALESCE(
-                    CASE WHEN a.x_invoice_type = 'consu' THEN a.amount_untaxed ELSE 0 END, 
+                    CASE WHEN a.x_invoice_type = 'consu' THEN a.amount_untaxed_signed ELSE 0 END,
                     0
                 )
             ) AS "TOTAL",
-            case 
-                when a.amount_tax > 0 then a.amount_untaxed 
-                else 0
-            end AS "VATABLE",
-            case 
-                when a.amount_tax = 0 then a.amount_untaxed 
-                else 0
-            end AS "ZERO RATED",
+            CASE
+                WHEN a.amount_tax_signed > 0 THEN a.amount_untaxed_signed
+                ELSE 0
+            END AS "VATABLE",
+            CASE
+                WHEN a.amount_tax_signed = 0 THEN a.amount_untaxed_signed
+                ELSE 0
+            END AS "ZERO RATED",
             '' AS "EXEMPT",
-            ABS(a.amount_total - a.amount_tax) AS "TOTAL TAXABLE SALES",
-            a.amount_tax AS "OUTPUT TAX 12%%",
-            a.amount_total AS "SI/OR AMOUNT",
+            a.amount_untaxed_signed AS "TOTAL TAXABLE SALES",
+            a.amount_tax_signed AS "OUTPUT TAX 12%%",
+            a.amount_total_signed AS "SI/OR AMOUNT",
             0 AS "7%% STANDARD INPUT VAT",
             0 AS "BIR FORM VAT 2307 AMOUNT",
             0 AS "BIR FORM EWT 2307 AMOUNT"
         FROM account_move a
-        LEFT JOIN res_partner r 
+        LEFT JOIN res_partner r
             ON a.partner_id = r.id
         WHERE a.move_type = 'out_invoice'
             AND a.state = 'posted'
@@ -402,9 +404,8 @@ SQL_QUERIES = {
                 GROUP BY aml.move_id
             )
             SELECT
-                purchase_order.date_order::date AS "TRANSACTION DATE",
-                NULL AS "AP NUMBER",
-                'DV# ' || bill.name AS "DV NUMBER",
+                COALESCE(purchase_order.date_order::date, bill.invoice_date) AS "TRANSACTION DATE",
+                bill.name AS "CV NUMBER",
                 supplier.name AS "NAME OF PAYEE/SUPPLIER",
                 supplier.contact_address_complete AS "ADDRESS",
                 supplier.vat AS "TIN",
@@ -432,7 +433,7 @@ SQL_QUERIES = {
                 NULL AS "DEFERRED INPUT TAX"
             FROM account_move bill
             JOIN res_partner supplier ON supplier.id = bill.partner_id
-            JOIN purchase_order purchase_order
+            LEFT JOIN purchase_order purchase_order
                 ON purchase_order.name = bill.invoice_origin
                 AND purchase_order.state IN ('purchase', 'done')
             LEFT JOIN bill_classification classification ON classification.move_id = bill.id
@@ -440,28 +441,180 @@ SQL_QUERIES = {
             CROSS JOIN params
             WHERE bill.move_type = 'in_invoice'
                 AND bill.state = 'posted'
-                AND bill.payment_state = 'paid'
-                AND purchase_order.date_order BETWEEN params.date_from AND params.date_to
-            ORDER BY purchase_order.date_order, purchase_order.name, bill.name;
+                AND bill.invoice_date BETWEEN params.date_from AND params.date_to
+            ORDER BY bill.invoice_date, bill.name;
         """,
     'cash_receipt_journal': """
+        WITH params AS (
+            SELECT %s::date AS date_from, %s::date AS date_to
+        ),
+        receipts AS (
+            -- Customer collections, in company currency (PHP).
+            -- 'in_process' = posted but not yet matched with a bank statement (Odoo 18).
+            SELECT
+                ap.id AS payment_id,
+                ap.date,
+                ap.name,
+                ap.memo,
+                ap.move_id,
+                ap.partner_id,
+                ap.company_id,
+                ap.outstanding_account_id,
+                ap.destination_account_id,
+                aj.type AS journal_type,
+                aj.name->>'en_US'
+                    || COALESCE(' - ' || rpb.acc_number, '') AS deposited_to,
+                ap.amount_company_currency_signed AS received
+            FROM account_payment ap
+            JOIN account_journal aj ON aj.id = ap.journal_id
+            LEFT JOIN res_partner_bank rpb ON rpb.id = aj.bank_account_id
+            CROSS JOIN params p
+            WHERE ap.payment_type = 'inbound'
+                AND ap.state IN ('in_process', 'paid')
+                AND aj.type IN ('bank', 'cash')
+                AND ap.date BETWEEN p.date_from AND p.date_to
+        ),
+        counterpart AS (
+            -- Receivable side of the payment entry = gross amount settled
+            SELECT r.payment_id, -SUM(aml.balance) AS amount
+            FROM receipts r
+            JOIN account_move_line aml
+                ON aml.move_id = r.move_id
+                AND aml.account_id = r.destination_account_id
+            GROUP BY r.payment_id
+        ),
+        applied AS (
+            -- What the payment was matched against (amount is already in PHP)
+            SELECT
+                r.payment_id,
+                doc.id AS doc_id,
+                doc.name AS doc_name,
+                doc.move_type,
+                doc.amount_total_signed AS doc_total,
+                SUM(apr.amount) AS amount
+            FROM receipts r
+            JOIN account_move_line pay_aml
+                ON pay_aml.move_id = r.move_id
+                AND pay_aml.account_id = r.destination_account_id
+            JOIN account_partial_reconcile apr ON apr.credit_move_id = pay_aml.id
+            JOIN account_move_line doc_aml ON doc_aml.id = apr.debit_move_id
+            JOIN account_move doc ON doc.id = doc_aml.move_id
+            GROUP BY r.payment_id, doc.id, doc.name, doc.move_type, doc.amount_total_signed
+        ),
+        invoice_ewt AS (
+            -- EWT withheld on the invoice itself (negative sale tax), PHP
+            SELECT aml.move_id, SUM(aml.balance) AS amount
+            FROM account_move_line aml
+            JOIN account_tax tax ON tax.id = aml.tax_line_id
+            WHERE tax.type_tax_use = 'sale'
+                AND tax.amount < 0
+                AND aml.move_id IN (SELECT doc_id FROM applied)
+            GROUP BY aml.move_id
+        ),
+        applied_totals AS (
+            SELECT
+                a.payment_id,
+                SUM(a.amount) AS applied_amount,
+                -- prorate invoice EWT by the share of the invoice this payment settled
+                SUM(
+                    CASE WHEN COALESCE(a.doc_total, 0) <> 0
+                         THEN ROUND(COALESCE(ie.amount, 0) * a.amount / a.doc_total, 2)
+                         ELSE 0 END
+                ) AS invoice_ewt,
+                STRING_AGG(DISTINCT 'SI# ' || a.doc_name, ', ')
+                    FILTER (WHERE a.move_type IN ('out_invoice', 'out_receipt')) AS si_refs,
+                STRING_AGG(DISTINCT a.doc_name, ', ')
+                    FILTER (WHERE a.move_type NOT IN ('out_invoice', 'out_receipt')) AS other_refs
+            FROM applied a
+            LEFT JOIN invoice_ewt ie ON ie.move_id = a.doc_id
+            GROUP BY a.payment_id
+        ),
+        writeoff AS (
+            -- Payment-difference lines booked on the payment entry itself
+            SELECT
+                r.payment_id,
+                SUM(aml.balance) FILTER (
+                    WHERE aml.balance > 0 AND (
+                        tax.amount < 0
+                        OR aa.name->>'en_US' ILIKE ANY (ARRAY['%%withhold%%', '%%creditable%%', '%%cwt%%', '%%ewt%%'])
+                    )
+                ) AS ewt,
+                SUM(aml.balance) FILTER (
+                    WHERE aml.balance > 0
+                        AND COALESCE(tax.amount, 0) >= 0
+                        AND aa.name->>'en_US' NOT ILIKE ALL (ARRAY['%%withhold%%', '%%creditable%%', '%%cwt%%', '%%ewt%%'])
+                        AND (
+                            aa.id = rc.account_journal_early_pay_discount_loss_account_id
+                            OR aa.name->>'en_US' ILIKE '%%discount%%'
+                        )
+                ) AS discount,
+                -SUM(aml.balance) FILTER (WHERE aml.balance < 0) AS interest
+            FROM receipts r
+            JOIN res_company rc ON rc.id = r.company_id
+            JOIN account_move_line aml
+                ON aml.move_id = r.move_id
+                AND aml.account_id NOT IN (r.outstanding_account_id, r.destination_account_id)
+            JOIN account_account aa ON aa.id = aml.account_id
+            LEFT JOIN account_tax tax ON tax.id = aml.tax_line_id
+            GROUP BY r.payment_id
+        ),
+        lines AS (
+            SELECT
+                r.date,
+                r.name,
+                rp.name AS particulars,
+                'OR# ' || r.name AS or_ref,
+                COALESCE(at.si_refs, '') AS si_ref,
+                COALESCE(
+                    at.other_refs,
+                    CASE WHEN at.payment_id IS NULL THEN r.memo END,
+                    ''
+                ) AS other_ref,
+                COALESCE(at.applied_amount, 0) + COALESCE(at.invoice_ewt, 0) AS sales,
+                GREATEST(COALESCE(cp.amount, 0) - COALESCE(at.applied_amount, 0), 0)
+                    + CASE WHEN r.move_id IS NULL THEN r.received ELSE 0 END AS other_collections,
+                CASE WHEN r.journal_type = 'cash' THEN r.received ELSE 0 END AS cash,
+                CASE WHEN r.journal_type = 'bank' THEN r.received ELSE 0 END AS check_amount,
+                r.received,
+                r.deposited_to,
+                COALESCE(at.invoice_ewt, 0) + COALESCE(w.ewt, 0) AS ewt,
+                COALESCE(w.discount, 0) AS discount,
+                COALESCE(w.interest, 0) AS interest
+            FROM receipts r
+            LEFT JOIN res_partner rp ON rp.id = r.partner_id
+            LEFT JOIN counterpart cp ON cp.payment_id = r.payment_id
+            LEFT JOIN applied_totals at ON at.payment_id = r.payment_id
+            LEFT JOIN writeoff w ON w.payment_id = r.payment_id
+        ),
+        days AS (
+            SELECT d::date AS day
+            FROM params p, generate_series(p.date_from, p.date_to, INTERVAL '1 day') AS d
+        )
         SELECT
-            ap.date AS "DATE",
-            ap.name AS "CR NUMBER",
-            ap.state AS "PAYMENT STATE",
-            rp.name AS "CUSTOMER",
-            rp.vat AS "TIN",
-            ap.memo AS "REFERENCE INVOICE",
-            ap.amount AS "AMOUNT RECEIVED",
-            aj.name->>'en_US' AS "JOURNAL"
-        FROM account_payment ap
-        JOIN account_journal aj ON aj.id = ap.journal_id
-        LEFT JOIN res_partner rp ON rp.id = ap.partner_id
-        WHERE ap.payment_type = 'inbound'
-            AND ap.state = 'paid'
-            AND aj.type = 'cash'
-            AND ap.date BETWEEN %s AND %s
-        ORDER BY ap.date, ap.name;
+            l.date AS "DATE COLLECTED",
+            l.particulars AS "PARTICULARS",
+            l.or_ref AS "OFFICIAL RECEIPT",
+            l.si_ref AS "SALES INVOICE",
+            l.other_ref AS "OTHER REFERENCE",
+            l.sales AS "SALES",
+            0 AS "LOAN PROCEEDS",
+            0 AS "REMITTANCES",
+            l.other_collections AS "OTHER COLLECTIONS",
+            l.sales + l.other_collections AS "TOTAL COLLECTIONS",
+            l.cash AS "CASH",
+            l.check_amount AS "CHECK",
+            l.received AS "TOTAL PAYMENT",
+            l.deposited_to AS "DEPOSITED TO",
+            l.received AS "TOTAL DEPOSITED",
+            l.sales + l.other_collections - l.received AS "VARIANCE",
+            l.ewt AS "EWT EXPANDED",
+            l.discount AS "DISCOUNT",
+            l.interest AS "INTEREST / PENALTIES",
+            l.ewt + l.discount - l.interest AS "TOTAL EXPLAINED",
+            (l.sales + l.other_collections - l.received)
+                - (l.ewt + l.discount - l.interest) AS "OVER/UNDER"
+        FROM lines l
+        ORDER BY l.date, l.name;
     """,
     'disbursement_journal': """
         WITH cash_moves AS (

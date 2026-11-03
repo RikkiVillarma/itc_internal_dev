@@ -2,8 +2,9 @@
 <odoo>
   <!--
     Shared receipt layout (Collection Receipt / Official Receipt).
-    Title comes from `receipt_title`. Layout follows the Etaxpoint OR format:
-    Header > Title > OR No/BR/Date > Customer > Reference Details (2-column)
+    Title comes from `receipt_title`, number prefix from `receipt_code` (OR / CR).
+    Layout follows the Etaxpoint OR format:
+    Header > Title > OR/CR No/BR/Date > Customer > Reference Details (2-column)
     > Collection Details + Mode of Payment > Amount in Words > Payment Details
     > Account Titles > Signatures > BIR footer
   -->
@@ -20,6 +21,14 @@
         <t t-set="fmt" t-value="{'widget': 'float', 'precision': 2}"/>
         <!-- Account codes treated as Creditable Withholding Tax (EWT / 2307) -->
         <t t-set="ewt_codes" t-value="('1042',)"/>
+        <!-- Receipt number prefix: OR when called from the Official Receipt wrapper, CR otherwise -->
+        <t t-set="no_label" t-value="receipt_code or 'CR'"/>
+        <!-- Currency labels for Amount in Words (plural / singular when whole amount is 1) -->
+        <t t-set="currency_word_plural" t-value="{'PHP': 'Philippine Pesos', 'USD': 'US Dollars', 'SGD': 'Singapore Dollars'}"/>
+        <t t-set="currency_word_singular" t-value="{'PHP': 'Philippine Peso', 'USD': 'US Dollar', 'SGD': 'Singapore Dollar'}"/>
+        <!-- Subunit labels for the cents part (plural / singular when cents is 1) -->
+        <t t-set="subunit_word_plural" t-value="{'PHP': 'Centavos', 'USD': 'Cents', 'SGD': 'Cents'}"/>
+        <t t-set="subunit_word_singular" t-value="{'PHP': 'Centavo', 'USD': 'Cent', 'SGD': 'Cent'}"/>
 
         <!-- ================= COMPUTATIONS ================= -->
         <t t-set="invoices" t-value="doc.reconciled_invoice_ids"/>
@@ -46,13 +55,19 @@
         <t t-set="chk_date" t-value="doc.date"/>
         <t t-set="chk_no" t-value="doc.memo or ''"/>
 
-        <!-- Amount in words: "... Philippine Pesos and 29/100" -->
+        <!-- Amount in words: "... Philippine Pesos / US Dollars / Singapore Dollars and 29/100" -->
         <t t-set="cents_total" t-value="int(round(doc.amount * 100))"/>
         <t t-set="whole" t-value="cents_total // 100"/>
         <t t-set="cents" t-value="cents_total % 100"/>
         <t t-set="unit_label" t-value="doc.currency_id.currency_unit_label or ''"/>
         <t t-set="words" t-value="doc.currency_id.amount_to_text(whole)"/>
         <t t-set="words" t-value="words[:-len(unit_label)].strip() if unit_label and words.endswith(unit_label) else words"/>
+        <!-- Known currencies get a full label; anything else falls back to the currency's own unit label -->
+        <t t-set="currency_words" t-value="(currency_word_singular if whole == 1 else currency_word_plural).get(doc.currency_id.name, unit_label)"/>
+        <!-- Cents in words: reuse amount_to_text on the cents value, then strip the unit label -->
+        <t t-set="cents_words" t-value="doc.currency_id.amount_to_text(cents) if cents else ''"/>
+        <t t-set="cents_words" t-value="cents_words[:-len(unit_label)].strip() if unit_label and cents_words.endswith(unit_label) else cents_words"/>
+        <t t-set="subunit_words" t-value="(subunit_word_singular if cents == 1 else subunit_word_plural).get(doc.currency_id.name, doc.currency_id.currency_subunit_label or '')"/>
 
         <!-- Reference details: 2 invoices per row, minimum 3 rows -->
         <t t-set="ref_rows" t-value="max((len(invoices) + 1) // 2, 3)"/>
@@ -91,10 +106,10 @@
               <t t-esc="receipt_title or 'COLLECTION RECEIPT'"/>
             </div>
 
-            <!-- ===== OR NO / BRANCH / DATE ===== -->
+            <!-- ===== OR/CR NO / BRANCH / DATE ===== -->
             <table class="or-plain" style="margin-bottom: 6px;">
               <tr>
-                <td style="width: 40%;"><strong>OR NO.:</strong> <span t-field="doc.name"/></td>
+                <td style="width: 40%;"><strong><t t-esc="no_label"/> NO.:</strong> <span t-field="doc.name"/></td>
                 <td style="width: 25%;" class="or-c"><strong t-esc="branch_code"/></td>
                 <td style="width: 35%;" class="or-r">
                   <strong>Date</strong> <span t-field="doc.date" t-options='{"format": "MMMM dd, yyyy"}'/>
@@ -228,7 +243,7 @@
             <!-- ===== AMOUNT IN WORDS ===== -->
             <p style="margin: 0 0 8px 0;">
               <strong>Amount in Words:</strong>
-              ***<t t-esc="words"/> Philippine Pesos and <t t-esc="'%02d' % cents"/>/100 ONLY***
+              ***<t t-esc="words"/> <t t-esc="currency_words"/><t t-if="cents"> and <t t-esc="cents_words"/> <t t-esc="subunit_words"/> ONLY</t>***
             </p>
 
             <!-- ===== PAYMENT DETAILS ===== -->
@@ -355,10 +370,11 @@
     </t>
   </template>
 
-  <!-- Official Receipt: same layout, different title -->
+  <!-- Official Receipt: same layout, different title and number prefix -->
   <template id="report_official_receipt_template">
     <t t-call="itc_internal_dev.report_custom_official_receipt_template">
       <t t-set="receipt_title" t-value="'OFFICIAL RECEIPT'"/>
+      <t t-set="receipt_code" t-value="'OR'"/>
     </t>
   </template>
 

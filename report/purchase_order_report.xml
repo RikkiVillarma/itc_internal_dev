@@ -161,6 +161,9 @@
               <!-- ===================== BOTTOM SECTION ===================== -->
 
               <!-- Tax Breakdown + Prepared By -->
+              <!-- Each line's untaxed amount goes to Vatable / VAT-Exempt / Zero-Rated by its VAT tax;
+                   VAT Amount excludes withholding taxes. See purchase.order.get_vat_breakdown(). -->
+              <t t-set="vat_bd" t-value="doc.get_vat_breakdown()"/>
               <t t-set="lbl" t-value="'border:1px solid black; border-top:none; padding:3px 6px; font-size:15px; font-weight:bold;'"/>
               <t t-set="val" t-value="'border:1px solid black; border-top:none; padding:3px 6px; font-size:14px; text-align:right;'"/>
               <table style="width:100%; border-collapse:collapse; page-break-inside:avoid;">
@@ -171,19 +174,19 @@
                           *** <span t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/> ***
                       </td>
                       <td t-att-style="lbl + ' width:22%;'">Vatable Sales</td>
-                      <td t-att-style="val + ' width:16%;'"><t t-esc="fmt(doc.amount_untaxed)"/></td>
+                      <td t-att-style="val + ' width:16%;'"><t t-esc="fmt(vat_bd['vatable'])"/></td>
                   </tr>
                   <tr>
                       <td t-att-style="lbl">VAT-Exempt</td>
-                      <td t-att-style="val">-</td>
+                      <td t-att-style="val"><t t-esc="fmt(vat_bd['exempt'])"/></td>
                   </tr>
                   <tr>
                       <td t-att-style="lbl">Zero-Rated</td>
-                      <td t-att-style="val">-</td>
+                      <td t-att-style="val"><t t-esc="fmt(vat_bd['zero_rated'])"/></td>
                   </tr>
                   <tr>
                       <td t-att-style="lbl">VAT Amount</td>
-                      <td t-att-style="val"><t t-esc="fmt(doc.amount_tax)"/></td>
+                      <td t-att-style="val"><t t-esc="fmt(vat_bd['vat_amount'])"/></td>
                   </tr>
                   <tr>
                       <td style="border:1px solid black; border-top:none; padding:3px 6px; font-size:15px; font-weight:bold;">

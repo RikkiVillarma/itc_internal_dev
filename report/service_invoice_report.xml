@@ -292,17 +292,17 @@
                     <th style="border:1px solid black; padding:3px; text-align:center; width:55px; font-weight:bold;">
                       Unit
                     </th>
-                    <th style="border:1px solid black; padding:3px; text-align:center; width:95px; font-weight:bold;">
-                      Unit Price<br/><span style="font-size:9px; font-weight:normal;">(VAT Incl.)</span>
+                    <th style="border:1px solid black; padding:5px; text-align:center; width:95px; font-weight:bold;">
+                      Unit Price<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
                     </th>
-                    <th style="border:1px solid black; padding:3px; text-align:center; width:105px; font-weight:bold;">
-                      Total<br/><span style="font-size:9px; font-weight:normal;">(VAT Incl.)</span>
+                    <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
+                      Total<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
                     </th>
                     <th style="border:1px solid black; padding:3px; text-align:center; width:70px; font-weight:bold;">
                       Discount
                     </th>
-                    <th style="border:1px solid black; padding:3px; text-align:center; width:105px; font-weight:bold;">
-                      Amount<br/><span style="font-size:9px; font-weight:normal;">(VAT Incl.)</span>
+                    <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
+                      Amount<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
                     </th>
                   </tr>
                 </thead>
@@ -321,16 +321,16 @@
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:3px 4px; text-align:center;">
                           <t t-esc="line.product_uom_id.name or ''"/>
                         </td>
-                        <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:3px 4px; text-align:right;">
+                        <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
                           <t t-esc="'{:,.2f}'.format(line_unit_incl[row_index])"/>
                         </td>
-                        <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:3px 4px; text-align:right;">
+                        <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
                           <t t-esc="'{:,.2f}'.format(line_unit_incl[row_index] * line.quantity)"/>
                         </td>
                         <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:3px 4px; text-align:right;">
                           <t t-esc="('{:g}'.format(line.discount) + '%') if line.discount else '0%'"/>
                         </td>
-                        <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:3px 4px; text-align:right;">
+                        <td style="border: none !important; border-left:1px solid black !important; border-right:1px solid black !important; padding:5px; text-align:right;">
                           <t t-esc="'{:,.2f}'.format(line_amount_incl[row_index])"/>
                         </td>
                       </t>
