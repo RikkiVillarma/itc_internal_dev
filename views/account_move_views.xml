@@ -25,7 +25,7 @@
                             string="Print Service Invoice"
                             type="action"
                             class="oe_highlight"
-                            invisible="move_type != 'out_invoice' and state == 'Posted'"/>
+                            invisible="not context.get('service_invoice_view') or move_type != 'out_invoice'"/>
 
                     <button name="%(report_sales_invoice_account_move)d"
                             string="Print Sales Invoice"
@@ -39,12 +39,12 @@
                             class="oe_highlight"
                             invisible="payment_state != 'paid' or move_type != 'out_invoice'"/> -->
 
-
+                    <!-- BIR 2307: only from the Service Invoice app's Invoices menu, and not in draft -->
                     <button name="action_print"
                             string="Print BIR 2307"
                             type="object"
                             class="oe_highlight"
-                            invisible="move_type == 'out_invoice'"/>
+                            invisible="not context.get('service_invoice_view') or move_type != 'out_invoice' or state == 'draft'"/>
 
                     <button name="%(itc_internal_dev.action_report_credit_memo_custom)d"
                             type="action"
@@ -93,7 +93,7 @@
             <field name="res_model">account.move</field>
             <field name="view_mode">list,form</field>
             <field name="domain">[('move_type','=','out_invoice')]</field>
-            <field name="context">{'default_move_type': 'out_invoice','search_default_posted': 1}</field>
+            <field name="context">{'default_move_type': 'out_invoice', 'search_default_posted': 1, 'service_invoice_view': 1}</field>
         </record>
         <menuitem
             id="menu_custom_sales_invoices"
