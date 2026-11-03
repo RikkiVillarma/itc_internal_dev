@@ -2,6 +2,8 @@
 <odoo>
   <!-- ===========================
        Paper Format: Service Invoice
+       Header top is placed at (margin_top - header_spacing) and grows downward:
+       45 - 35 = header starts ~10mm from the top edge; body starts at 45mm.
   ============================ -->
   <record id="paperformat_service_invoice" model="report.paperformat">
     <field name="name">Service Invoice (A4)</field>
@@ -13,7 +15,7 @@
     <field name="margin_left">7</field>
     <field name="margin_right">7</field>
     <field name="header_line" eval="False"/>
-    <field name="header_spacing">8</field>
+    <field name="header_spacing">35</field>
     <field name="dpi">90</field>
   </record>
 
@@ -65,29 +67,28 @@
 
         <!-- ================= FOOTER (lalabas sa bawat page) ================= -->
         <!-- Annex B-1 item 13: Permit to Use / ATP details -->
+        <!-- Built with divs (display:table) instead of <table> so report CSS can't draw a box around it -->
         <div class="footer" style="font-family: Arial, sans-serif; font-size:9px; line-height:1.4;">
-          <table style="width:100%; border-collapse:collapse; border-top:1px solid black;">
-            <tr>
-              <td style="width:50%; vertical-align:top; padding-top:4px;">
-                Printer / Software Provider:
-                <t t-esc="company.x_bir_provider_name or ''"/><br/>
-                ATP No. / OCN:
-                <t t-esc="company.x_bir_atp_no or ''"/><br/>
-                Date Issued:
-                <t t-esc="company.x_bir_atp_date.strftime('%m/%d/%Y') if company.x_bir_atp_date else ''"/><br/>
-                BIR Permit No. (PTU / ACCN / PTI):
-                <t t-esc="company.x_bir_permit_no or ''"/>
-              </td>
-              <td style="width:50%; vertical-align:top; padding-top:4px;">
-                Accreditation No.:
-                <t t-esc="company.x_bir_accreditation_no or ''"/><br/>
-                Accreditation Validity:
-                <t t-esc="company.x_bir_accreditation_validity or ''"/><br/>
-                Approved Series Range:
-                <t t-esc="company.x_bir_series_range or ''"/>
-              </td>
-            </tr>
-          </table>
+          <div style="display:table; width:100%; border-top:1px solid black;">
+            <div style="display:table-cell; width:50%; vertical-align:top; padding-top:4px;">
+              Printer / Software Provider:
+              <t t-esc="company.x_bir_provider_name or ''"/><br/>
+              ATP No. / OCN:
+              <t t-esc="company.x_bir_atp_no or ''"/><br/>
+              Date Issued:
+              <t t-esc="company.x_bir_atp_date.strftime('%m/%d/%Y') if company.x_bir_atp_date else ''"/><br/>
+              BIR Permit No. (PTU / ACCN / PTI):
+              <t t-esc="company.x_bir_permit_no or ''"/>
+            </div>
+            <div style="display:table-cell; width:50%; vertical-align:top; padding-top:4px;">
+              Accreditation No.:
+              <t t-esc="company.x_bir_accreditation_no or ''"/><br/>
+              Accreditation Validity:
+              <t t-esc="company.x_bir_accreditation_validity or ''"/><br/>
+              Approved Series Range:
+              <t t-esc="company.x_bir_series_range or ''"/>
+            </div>
+          </div>
         </div>
 
         <!-- ================= PAGE CONTENT ================= -->
@@ -163,10 +164,11 @@
 
               <!-- ============================================ -->
               <!-- Title (item 1) + Serial No. (item 5) + Date (item 6) -->
+              <!-- Layout built with divs (display:table) so report CSS can't box it -->
               <!-- ============================================ -->
-              <table style="width:100%; border-collapse:collapse; margin-bottom:6px;">
-                <tr>
-                  <td style="width:55%; vertical-align:bottom; padding:0;">
+              <div style="display:table; width:100%; margin-bottom:6px;">
+                <div style="display:table-row;">
+                  <div style="display:table-cell; width:55%; vertical-align:bottom;">
                     <div style="font-size:13px; font-weight:bold;">SERVICE</div>
                     <div style="font-size:28px; font-weight:bold; line-height:1;">INVOICE</div>
                     <div style="font-size:12px; margin-top:4px;">
@@ -176,8 +178,8 @@
                     <div style="font-size:12px;">
                       <strong>BR:</strong> BR-00000-MAIN
                     </div>
-                  </td>
-                  <td style="width:45%; vertical-align:bottom; padding:0;">
+                  </div>
+                  <div style="display:table-cell; width:45%; vertical-align:bottom;">
                     <table style="width:100%; border:1px solid black; border-collapse:collapse; font-size:12px;">
                       <tr>
                         <td style="width:50%; border:1px solid black; padding:2px 4px;">
@@ -204,9 +206,9 @@
                         </td>
                       </tr>
                     </table>
-                  </td>
-                </tr>
-              </table>
+                  </div>
+                </div>
+              </div>
 
               <!-- ============================================ -->
               <!-- Buyer Information (item 7) -->
@@ -370,11 +372,12 @@
 
               <!-- ============================================ -->
               <!-- Summary: VAT breakdown (item 10) + Totals (items 9, 11) + SC/PWD (item 12) -->
+              <!-- Layout built with divs (display:table) so report CSS can't box it -->
               <!-- ============================================ -->
-              <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; page-break-inside:avoid;">
-                <tr>
+              <div style="display:table; width:100%; font-size:12px; margin-top:6px; page-break-inside:avoid;">
+                <div style="display:table-row;">
                   <!-- LEFT -->
-                  <td style="width:42%; vertical-align:top; padding:0 8px 0 0;">
+                  <div style="display:table-cell; width:42%; vertical-align:top; padding:0 8px 0 0;">
 
                     <!-- VAT Breakdown -->
                     <table style="width:100%; border:1px solid black; border-collapse:collapse;">
@@ -410,10 +413,10 @@
                       *** <t t-esc="amount_words"/> ***
                     </div>
 
-                  </td>
+                  </div>
 
                   <!-- RIGHT -->
-                  <td style="width:58%; vertical-align:top; padding:0;">
+                  <div style="display:table-cell; width:58%; vertical-align:top;">
 
                     <!-- Totals -->
                     <table style="width:100%; border:1px solid black; border-collapse:collapse;">
@@ -489,9 +492,9 @@
                       </tr>
                     </table>
 
-                  </td>
-                </tr>
-              </table>
+                  </div>
+                </div>
+              </div>
 
               <!-- ============================================ -->
               <!-- Terms and Conditions (kept together on one page) -->
