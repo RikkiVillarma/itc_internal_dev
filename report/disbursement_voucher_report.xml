@@ -3,10 +3,17 @@
 
   <!-- ================= SHARED BODY ================= -->
   <!-- Expects: company, partner, payee_ref, voucher_no, voucher_date, release_date, currency, amount, amount_words, particulars, move
+       Optional: display_account (callable line -> account shown on the voucher; defaults to the line's own account)
        All amounts are in `currency` (the bill's / payment's own currency), never converted to PHP. -->
   <template id="disbursement_voucher_body">
     <!-- Number format follows the currency's decimal places -->
     <t t-set="fmt" t-value="lambda v: ('{:,.%sf}' % currency.decimal_places).format(v or 0.0)"/>
+    <!-- Account shown per line; wrappers may remap it (e.g. Trade AP -> Cash in Bank on bills) -->
+    <t t-set="dv_account" t-value="display_account or (lambda l: l.account_id)"/>
+    <!-- Finance format: no "And" between number groups and no commas
+         (Odoo: "Two Hundred And Eighty-One Thousand, Two Hundred And Fifty Peso").
+         Case-sensitive on purpose: the lowercase "and" before Centavos is kept. -->
+    <t t-set="amount_words_clean" t-value="(amount_words or '').replace(' And ', ' ').replace(',', '')"/>
     <div class="page" style="font-family: Arial; font-size:16pt; padding:30px;">
       <div style="width:100%; margin-bottom:30px;">
         <div style="display:inline-block; width:60%; vertical-align:top;">
@@ -58,7 +65,7 @@
       <table style="width:100%; border:1px solid black; border-collapse:collapse; margin-top:20px;">
         <tr>
           <td style="border:1px solid black; width:20%; padding:5px;"><strong>Amount</strong></td>
-          <td style="border:1px solid black; padding:5px;"><t t-esc="amount_words"/></td>
+          <td style="border:1px solid black; padding:5px;"><t t-esc="amount_words_clean"/></td>
         </tr>
         <tr>
           <td style="border:1px solid black; padding:5px; vertical-align:top;"><strong>Particulars</strong></td>
@@ -86,8 +93,9 @@
         </thead>
         <tbody>
           <tr t-foreach="lines" t-as="line">
-            <td style="border:1px solid black;"><t t-esc="line.account_id.code"/></td>
-            <td style="border:1px solid black;"><t t-esc="line.account_id.name"/></td>
+            <t t-set="acc" t-value="dv_account(line)"/>
+            <td style="border:1px solid black;"><t t-esc="acc.code"/></td>
+            <td style="border:1px solid black;"><t t-esc="acc.name"/></td>
             <td style="border:1px solid black; text-align:right;">
               <t t-esc="fmt(line.amount_currency if line.amount_currency &gt; 0 else 0.0)"/>
             </td>
@@ -138,6 +146,8 @@
           <t t-set="amount_words" t-value="doc.currency_id.amount_to_text(doc.amount)"/>
           <t t-set="particulars" t-value="doc.memo"/>
           <t t-set="move" t-value="doc.move_id"/>
+          <!-- Payment entries already post to the bank side; show accounts as posted -->
+          <t t-set="display_account" t-value="False"/>
         </t>
       </t>
     </t>
@@ -157,6 +167,15 @@
              If a bill was paid in several releases, the latest date is shown. -->
         <t t-set="dv_payments" t-value="doc.matched_payment_ids | doc.origin_payment_id"/>
         <t t-set="dv_release_dates" t-value="dv_payments.filtered(lambda p: p.state != 'canceled' and p.release_date).mapped('release_date')"/>
+        <!-- Vendor bills: show the Trade AP line as the Cash in Bank account the money is released from.
+             Display only; the posted entry keeps crediting Trade AP.
+             Bank account = journal of the (latest non-canceled) payment against the bill;
+             if not yet paid, the company's first bank journal. Manual JEs are left as posted. -->
+        <t t-set="dv_is_bill" t-value="doc.move_type in ('in_invoice', 'in_receipt')"/>
+        <t t-set="dv_bank_journal" t-value="dv_payments.filtered(lambda p: p.state != 'canceled').sorted('date')[-1:].journal_id"/>
+        <t t-set="dv_bank_journal" t-value="dv_bank_journal or env['account.journal'].search([('type', '=', 'bank'), ('company_id', '=', doc.company_id.id)], limit=1)"/>
+        <t t-set="dv_bank_account" t-value="dv_bank_journal.default_account_id if dv_is_bill else False"/>
+        <t t-set="display_account" t-value="lambda l: dv_bank_account if (dv_bank_account and l.account_id.account_type == 'liability_payable') else l.account_id"/>
         <t t-call="itc_internal_dev.disbursement_voucher_body">
           <t t-set="company" t-value="doc.company_id"/>
           <t t-set="partner" t-value="doc.partner_id or doc.line_ids.mapped('partner_id')[:1]"/>
