@@ -1943,11 +1943,15 @@ class SqlReport(models.Model):
             line.html_result = line.get_filtered_html(self.filter_column, self.filter_value)
 
 
-    @api.onchange('year')
+    def _apply_year_filter(self):
+        for rec in self:
+            if rec.filter_by_year and rec.year:
+                rec.from_date = date(int(rec.year), 1, 1)
+                rec.to_date = date(int(rec.year), 12, 31)
+
+    @api.onchange('filter_by_year', 'year')
     def _onchange_year(self):
-        if self.year:
-            self.from_date = f'{self.year}-01-01'
-            self.to_date = f'{self.year}-12-31'
+        self._apply_year_filter()
 
     def _get_cash_flow_statement_rows(self):
         self.ensure_one()
@@ -2217,6 +2221,7 @@ class SqlReport(models.Model):
     """ Generate Report Action"""
     def action_execute_query(self):
         self.ensure_one()
+        self._apply_year_filter()
 
         if self.report_category not in ['books', 'annex', 'other_reports', 'tax_returns']:
             raise ValidationError("Please select a valid report category.")
@@ -2341,6 +2346,7 @@ class SqlReport(models.Model):
 
     def action_export_excel(self):
         self.ensure_one()
+        self._apply_year_filter()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
 
@@ -2466,6 +2472,7 @@ class SqlReport(models.Model):
     """ Export to PDF Action"""
     def action_export_pdf(self):
         self.ensure_one()
+        self._apply_year_filter()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
 
@@ -2657,6 +2664,7 @@ class SqlReport(models.Model):
 
     def action_export_dat(self):
         self.ensure_one()
+        self._apply_year_filter()
         if not self.result_ids:
             raise UserError("No data to export. Execute a query first.")
         if self.name not in DAT_SUPPORTED_REPORTS:

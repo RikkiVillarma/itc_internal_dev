@@ -138,11 +138,11 @@
               <t t-set="cwt_total" t-value="invoice_cwt + payment_cwt"/>
 
               <!-- Annex B-1 item 9 flow -->
-              <t t-set="total_sales" t-value="vatable_sales + zero_rated_sales + exempt_sales + vat_amount"/>
+              <t t-set="total_sales" t-value="vatable_sales + vat_amount"/>
               <t t-set="net_of_vat" t-value="total_sales - vat_amount"/>
               <t t-set="special_discount" t-value="0.0"/>
               <t t-set="amount_due"
-                t-value="max(0.0, net_of_vat - special_discount + vat_amount - cwt_total - vat_withholding)"/>
+                  t-value="max(0.0, net_of_vat + zero_rated_sales + exempt_sales - special_discount + vat_amount - cwt_total - vat_withholding)"/>
 
               <!-- Amount in words, finance format (same as the Disbursement Voucher):
                    no "And" between number groups and no commas
@@ -301,16 +301,25 @@
                       Unit
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:95px; font-weight:bold;">
-                      Unit Price<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
+                      Unit Price
+                      <t t-if="vatable_lines">
+                        <br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
+                      </t>
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
-                      Total<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
+                      Total
+                      <t t-if="vatable_lines">
+                        <br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
+                      </t>
                     </th>
                     <th style="border:1px solid black; padding:3px; text-align:center; width:70px; font-weight:bold;">
                       Discount
                     </th>
                     <th style="border:1px solid black; padding:5px; text-align:center; width:110px; font-weight:bold;">
-                      Amount<br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
+                      Amount
+                      <t t-if="vatable_lines">
+                        <br/><span style="font-size:10px; font-weight:normal;">(VAT Incl.)</span>
+                      </t>
                     </th>
                   </tr>
                 </thead>

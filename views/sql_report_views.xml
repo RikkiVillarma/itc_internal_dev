@@ -64,8 +64,8 @@
                             <field name="year" invisible="filter_by_year == False"/>
                         </group>
                         <group>
-                            <field name="from_date" invisible="filter_by_year == True"/>
-                            <field name="to_date" invisible="filter_by_year == True"/>
+                            <field name="from_date" invisible="filter_by_year == True" force_save="1"/>
+                            <field name="to_date" invisible="filter_by_year == True" force_save="1"/>
                             <field name="cash_flow_journal_ids"
                                 widget="many2many_tags"
                                 invisible="name != 'cash_flow_statement'"
