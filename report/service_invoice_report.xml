@@ -235,10 +235,15 @@
                 </tr>
                 <tr>
                   <td style="border:1px solid black; padding:3px 5px;">
-                    <strong>TIN:</strong>
+                    <strong>Registered TIN Number:</strong>
                   </td>
                   <td style="border:1px solid black; padding:3px 5px;">
                     <t t-esc="buyer.vat or ''"/>
+                    <t t-if="buyer.x_vat_status">
+                      <span> | </span>
+                      <t t-if="buyer.x_vat_status == 'vat'">VAT Registered</t>
+                      <t t-elif="buyer.x_vat_status == 'non_vat'">Non-VAT</t>
+                    </t>
                   </td>
                 </tr>
                 <tr>
@@ -475,12 +480,12 @@
                           <t t-esc="'{:,.2f}'.format(cwt_total)"/>
                         </td>
                       </tr>
-                      <tr>
+                      <!-- <tr>
                         <td style="border:1px solid black; padding:3px 5px; text-align:right;">Less: Withholding VAT</td>
                         <td style="border:1px solid black; padding:3px 5px; text-align:right;">
                           <t t-esc="'{:,.2f}'.format(vat_withholding)"/>
                         </td>
-                      </tr>
+                      </tr> -->
                       <tr>
                         <td style="border:1px solid black; padding:4px 5px; text-align:right; font-weight:bold;">
                           TOTAL AMOUNT DUE (<t t-esc="currency_code"/>)

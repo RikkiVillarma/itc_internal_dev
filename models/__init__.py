@@ -15,3 +15,4 @@ from . import collection_receipt
 from . import account_tax
 from . import res_company
 #from . import report_xlsx_global 
+from . import res_partner
