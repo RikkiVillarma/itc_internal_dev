@@ -7,6 +7,26 @@ from odoo.exceptions import UserError
 class AccountMoveExpenseDv(models.Model):
     _inherit = 'account.move'
 
+    def _get_disbursement_voucher_report_lines(self, currency, display_account):
+        self.ensure_one()
+        grouped_lines = {}
+
+        for move_line in self.line_ids.filtered(
+            lambda line: not currency.is_zero(line.amount_currency)
+        ):
+            account = display_account(move_line)
+            row = grouped_lines.get(account.id)
+            if row is None:
+                row = {'account': account, 'debit': 0.0, 'credit': 0.0}
+                grouped_lines[account.id] = row
+
+            if move_line.amount_currency > 0:
+                row['debit'] += move_line.amount_currency
+            else:
+                row['credit'] += -move_line.amount_currency
+
+        return list(grouped_lines.values())
+
     dv_expense_ids = fields.One2many(
         comodel_name='hr.expense',
         inverse_name='dv_move_id',
