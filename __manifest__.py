@@ -44,6 +44,7 @@
         'report/bir_2550m_report.xml',
         #Views
         #'views/salary_advance_views.xml',
+        'views/res_partner_views.xml',
         'views/purchase_journal_wizard_views.xml',
         'views/expense_sheet.xml',
         'views/expense_view.xml',
