@@ -79,9 +79,9 @@
            Debit/Credit come from amount_currency (the line's amount in the document
            currency): positive = debit, negative = credit. For PHP documents this is
            identical to the old debit/credit columns. -->
-      <t t-set="lines" t-value="move.line_ids.filtered(lambda l: not currency.is_zero(l.amount_currency)) if move else []"/>
-      <t t-set="total_debit" t-value="sum(l.amount_currency for l in lines if l.amount_currency &gt; 0)"/>
-      <t t-set="total_credit" t-value="sum(-l.amount_currency for l in lines if l.amount_currency &lt; 0)"/>
+      <t t-set="report_lines" t-value="move._get_disbursement_voucher_report_lines(currency, dv_account) if move else []"/>
+      <t t-set="total_debit" t-value="sum(line['debit'] for line in report_lines)"/>
+      <t t-set="total_credit" t-value="sum(line['credit'] for line in report_lines)"/>
       <table style="width:100%; border:1px solid black; border-collapse:collapse;">
         <thead>
           <tr>
@@ -92,15 +92,15 @@
           </tr>
         </thead>
         <tbody>
-          <tr t-foreach="lines" t-as="line">
-            <t t-set="acc" t-value="dv_account(line)"/>
+          <tr t-foreach="report_lines" t-as="line">
+            <t t-set="acc" t-value="line['account']"/>
             <td style="border:1px solid black;"><t t-esc="acc.code"/></td>
             <td style="border:1px solid black;"><t t-esc="acc.name"/></td>
             <td style="border:1px solid black; text-align:right;">
-              <t t-esc="fmt(line.amount_currency if line.amount_currency &gt; 0 else 0.0)"/>
+              <t t-esc="fmt(line['debit'])"/>
             </td>
             <td style="border:1px solid black; text-align:right;">
-              <t t-esc="fmt(-line.amount_currency if line.amount_currency &lt; 0 else 0.0)"/>
+              <t t-esc="fmt(line['credit'])"/>
             </td>
           </tr>
           <tr>
@@ -127,6 +127,10 @@
           <td>Date:</td><td>Date:</td><td>Date:</td><td>Date:</td>
         </tr>
       </table>
+
+      <div style="margin-top:50px; text-align:center; font-size:12pt; color:#000;">
+        THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX
+      </div>
     </div>
   </template>
 
