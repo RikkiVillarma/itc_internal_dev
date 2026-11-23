@@ -129,34 +129,40 @@
               </tr>
               <tr>
                 <td><strong>TIN:</strong></td>
-                <td><span t-esc="doc.partner_id.vat or ''"/></td>
+                <td>
+                  <t t-esc="doc.partner_id.vat or ''"/>
+                  <t t-if="doc.partner_id.x_vat_status">
+                    <span> | </span>
+                    <t t-if="doc.partner_id.x_vat_status == 'vat'">VAT REG TIN</t>
+                    <t t-elif="doc.partner_id.x_vat_status == 'non_vat'">NON VAT</t>
+                  </t>
+                </td>
               </tr>
             </table>
 
             <div class="or-gap"/>
 
-            <!-- ===== REFERENCE DETAILS (2 per row, gross of EWT) ===== -->
+            <!-- ===== REFERENCE DETAILS (one invoice per row) ===== -->
             <table class="or-tbl">
               <thead>
                 <tr><th colspan="4">REFERENCE DETAILS</th></tr>
                 <tr>
-                  <th style="width: 30%;">Reference Number</th>
+                  <th style="width: 30%;">Reference Date</th>
                   <th style="width: 20%;">Amount</th>
                   <th style="width: 30%;">Reference Number</th>
                   <th style="width: 20%;">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                <t t-foreach="range(ref_rows)" t-as="r">
-                  <t t-set="left" t-value="invoices[2 * r] if 2 * r &lt; len(invoices) else False"/>
-                  <t t-set="right" t-value="invoices[2 * r + 1] if 2 * r + 1 &lt; len(invoices) else False"/>
-                  <t t-set="left_ewt" t-value="sum(abs(l.balance) for l in left.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0)) if left else 0.0"/>
-                  <t t-set="right_ewt" t-value="sum(abs(l.balance) for l in right.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0)) if right else 0.0"/>
+                <t t-foreach="invoices" t-as="invoice">
+                  <t t-set="reference_date" t-value="invoice.invoice_date or invoice.date"/>
+                  <t t-set="reference_amount" t-value="sum(abs(l.balance) for l in invoice.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0))"/>
+                  <t t-set="reference_gross" t-value="invoice.amount_total + reference_amount"/>
                   <tr>
-                    <td><t t-if="left" t-esc="left.name"/></td>
-                    <td class="or-r"><t t-if="left" t-esc="left.amount_total + left_ewt" t-options="fmt"/></td>
-                    <td><t t-if="right" t-esc="right.name"/></td>
-                    <td class="or-r"><t t-if="right" t-esc="right.amount_total + right_ewt" t-options="fmt"/></td>
+                    <td><t t-if="reference_date" t-esc="reference_date.strftime('%m/%d/%Y')"/></td>
+                    <td class="or-r"><t t-esc="reference_gross" t-options="fmt"/></td>
+                    <td><t t-esc="invoice.name"/></td>
+                    <td class="or-r"><t t-esc="reference_gross" t-options="fmt"/></td>
                   </tr>
                 </t>
               </tbody>
@@ -185,10 +191,6 @@
                       </tr>
                       <tr>
                         <td>Less: 2307 - EWT</td>
-                        <td class="or-r"><t t-esc="ewt_total" t-options="fmt"/></td>
-                      </tr>
-                      <tr>
-                        <td>Less: Other Deductions</td>
                         <td class="or-r"><t t-esc="other_ded" t-options="fmt"/></td>
                       </tr>
                       <tr>
@@ -304,7 +306,7 @@
                   <td/>
                 </tr>
                 <tr t-if="other_ded">
-                  <td>Other Deductions</td>
+                  <td>Withholding Tax</td>
                   <td class="or-r"><t t-esc="other_ded" t-options="fmt"/></td>
                   <td/>
                 </tr>
@@ -361,9 +363,7 @@
             <td style="width: 60%; text-align: center; font-weight: bold;">
               THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX
             </td>
-            <td style="width: 20%; text-align: right; font-style: italic; font-size: 11px;">
-              Page <span class="page"/> of <span class="topage"/>
-            </td>
+            <td style="width: 20%;"/>
           </tr>
         </table>
       </div>

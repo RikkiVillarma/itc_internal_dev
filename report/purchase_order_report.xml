@@ -89,7 +89,14 @@
                   </tr>
                   <tr>
                       <td style="border:1px solid black; padding:5px;"><strong>TIN:</strong></td>
-                      <td style="border:1px solid black; padding:5px;"><t t-esc="doc.partner_id.vat or ''"/></td>
+                      <td style="border:1px solid black; padding:5px;">
+                          <t t-esc="doc.partner_id.vat or ''"/>
+                          <t t-if="doc.partner_id.x_vat_status">
+                              <span> | </span>
+                              <t t-if="doc.partner_id.x_vat_status == 'vat'">VAT Registered</t>
+                              <t t-elif="doc.partner_id.x_vat_status == 'non_vat'">Non-VAT</t>
+                          </t>
+                      </td>
                   </tr>
                   <tr style="height:40px;">
                       <td style="border:1px solid black; padding:5px; vertical-align:top;"><strong>Delivery/Shipped To:</strong></td>
@@ -166,12 +173,13 @@
               <t t-set="vat_bd" t-value="doc.get_vat_breakdown()"/>
               <t t-set="lbl" t-value="'border:1px solid black; border-top:none; padding:3px 6px; font-size:15px; font-weight:bold;'"/>
               <t t-set="val" t-value="'border:1px solid black; border-top:none; padding:3px 6px; font-size:14px; text-align:right;'"/>
+              <t t-set="amount_words_clean" t-value="doc.currency_id.amount_to_text(doc.amount_total).replace(' And ', ' ').replace(',', '')"/>
               <table style="width:100%; border-collapse:collapse; page-break-inside:avoid;">
                   <tr>
                       <!-- Left blank area (amount in words); delete the inner content to leave it empty like the sample -->
                       <td rowspan="4" style="width:62%; border:1px solid black; border-top:none; padding:8px; vertical-align:top; font-size:13px; font-style:italic;">
                           <strong>Amount in words:</strong>
-                          *** <span t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/> ***
+                          *** <span t-esc="amount_words_clean"/> ***
                       </td>
                       <td t-att-style="lbl + ' width:22%;'">Vatable Sales</td>
                       <td t-att-style="val + ' width:16%;'"><t t-esc="fmt(vat_bd['vatable'])"/></td>
@@ -277,11 +285,7 @@
           <div class="footer" style="font-family: Arial, sans-serif;">
               <table style="width:100%; border-collapse:collapse; font-size:13px; margin:0;">
                   <tr>
-                      <td style="width:33%; border:none;"/>
-                      <td style="width:34%; border:none; padding:0; text-align:center; font-style:italic;">
-                          Page <span class="page"/> of <span class="topage"/>
-                      </td>
-                      <td style="width:33%; border:none; padding:0; text-align:right;">
+                      <td style="width:100%; border:none; padding:0; text-align:right;">
                           System Generated. No signature is required.
                       </td>
                   </tr>
