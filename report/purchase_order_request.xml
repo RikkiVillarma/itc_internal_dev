@@ -64,7 +64,7 @@
                   </div>
                   <div style="margin-bottom:4px;">
                     <strong>Amount in words:</strong>
-                    ***<t t-esc="doc.currency_id.amount_to_text(doc.amount_total)"/>***
+                    ***<t t-esc="amount_words_clean"/>***
                   </div>
                   <div>
                     ONLY***
@@ -157,6 +157,8 @@
               <!-- ============================================ -->
               <!-- TABLE 2: REMARKS -->
               <!-- ============================================ -->
+              <t t-set="amount_words_clean"
+                 t-value="doc.currency_id.amount_to_text(doc.amount_total).replace(' And ', ' ').replace(',', '')"/>
               <table style="width:100%; border:1.5px solid black; border-collapse:collapse; font-size:14px; margin-bottom:40px;">
                 <tr>
                   <td style="border:1.5px solid black; padding:8px 12px; font-weight:bold;">
