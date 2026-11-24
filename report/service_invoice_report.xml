@@ -32,6 +32,8 @@
         <t t-set="buyer" t-value="doc.partner_id"/>
         <t t-set="ship" t-value="doc.partner_shipping_id or doc.partner_id"/>
         <t t-set="currency_code" t-value="doc.currency_id.name or ''"/>
+        <t t-set="is_philippine_customer"
+          t-value="buyer.country_id and buyer.country_id.code == 'PH'"/>
         <!-- Prefix inserted before the currency unit in the amount in words -->
         <t t-set="currency_prefix" t-value="{'SGD': 'Singaporean', 'USD': 'US'}.get(currency_code, '')"/>
 
@@ -135,14 +137,16 @@
               <t t-set="vat_withholding"
                 t-value="sum(abs(payment.payment_tax_amount or 0.0) for payment in all_invoice_payments)"/>
 
-              <t t-set="cwt_total" t-value="invoice_cwt + payment_cwt"/>
+              <!-- Odoo can expose the same withholding from both the invoice tax lines
+                   and the payment fields. Deduct it once to avoid a double CWT deduction. -->
+              <t t-set="cwt_total" t-value="max(invoice_cwt, payment_cwt)"/>
 
               <!-- Annex B-1 item 9 flow -->
               <t t-set="total_sales" t-value="vatable_sales + vat_amount"/>
               <t t-set="net_of_vat" t-value="total_sales - vat_amount"/>
               <t t-set="special_discount" t-value="0.0"/>
               <t t-set="amount_due"
-                  t-value="max(0.0, net_of_vat + zero_rated_sales + exempt_sales - special_discount + vat_amount - cwt_total - vat_withholding)"/>
+                  t-value="max(0.0, net_of_vat + zero_rated_sales + exempt_sales - special_discount + vat_amount - cwt_total)"/>
 
               <!-- Amount in words, finance format (same as the Disbursement Voucher):
                    no "And" between number groups and no commas
@@ -239,7 +243,7 @@
                   </td>
                   <td style="border:1px solid black; padding:3px 5px;">
                     <t t-esc="buyer.vat or ''"/>
-                    <t t-if="buyer.x_vat_status">
+                    <t t-if="is_philippine_customer and buyer.x_vat_status">
                       <span> | </span>
                       <t t-if="buyer.x_vat_status == 'vat'">VAT Registered</t>
                       <t t-elif="buyer.x_vat_status == 'non_vat'">Non-VAT</t>

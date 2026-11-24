@@ -61,11 +61,13 @@
         <t t-set="cents" t-value="cents_total % 100"/>
         <t t-set="unit_label" t-value="doc.currency_id.currency_unit_label or ''"/>
         <t t-set="words" t-value="doc.currency_id.amount_to_text(whole)"/>
+        <t t-set="words" t-value="words.replace(' And ', ' ').replace(',', '')"/>
         <t t-set="words" t-value="words[:-len(unit_label)].strip() if unit_label and words.endswith(unit_label) else words"/>
         <!-- Known currencies get a full label; anything else falls back to the currency's own unit label -->
         <t t-set="currency_words" t-value="(currency_word_singular if whole == 1 else currency_word_plural).get(doc.currency_id.name, unit_label)"/>
         <!-- Cents in words: reuse amount_to_text on the cents value, then strip the unit label -->
         <t t-set="cents_words" t-value="doc.currency_id.amount_to_text(cents) if cents else ''"/>
+        <t t-set="cents_words" t-value="cents_words.replace(' And ', ' ').replace(',', '')"/>
         <t t-set="cents_words" t-value="cents_words[:-len(unit_label)].strip() if unit_label and cents_words.endswith(unit_label) else cents_words"/>
         <t t-set="subunit_words" t-value="(subunit_word_singular if cents == 1 else subunit_word_plural).get(doc.currency_id.name, doc.currency_id.currency_subunit_label or '')"/>
 
