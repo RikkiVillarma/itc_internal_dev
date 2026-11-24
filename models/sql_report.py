@@ -2247,18 +2247,49 @@ class SqlReport(models.Model):
 
             serializable_rows, row_html_parts = [], []
             numeric_totals = {col: 0 for col in columns}
+            general_journal_text_columns = {
+                'DATE',
+                'JOURNAL BATCH ID',
+                'DESCRIPTION',
+                'ACCOUNT CODE',
+                'ACCOUNT TITLE',
+                'REF NUMBER',
+            }
+            purchase_journal_text_columns = {
+                'TRANSACTION DATE',
+                'CV NUMBER',
+                'NAME OF PAYEE/SUPPLIER',
+                'ADDRESS',
+                'TIN',
+                'REF DATE',
+                'PRIMARY',
+                'SUPPLEMENTARY',
+                'ACCOUNT TITLE',
+                'EWT ATC',
+                'EWT RATE',
+            }
 
             for row in rows:
                 row_dict, cells = {}, []
                 is_summary_total = self._is_summary_total_row(dict(zip(columns, row)), columns)
                 for col, val in zip(columns, row):
+                    is_general_journal_text = (
+                        self.name == 'general_journal'
+                        and col in general_journal_text_columns
+                    )
+                    is_purchase_journal_text = (
+                        self.name == 'purchase_journal'
+                        and col in purchase_journal_text_columns
+                    )
                     if isinstance(val, bool):
                         # bool is a subclass of int — must be checked first,
                         # otherwise True/False get formatted as "1"/"0" and summed in totals
                         val = 'Y' if val else 'N'
                     elif isinstance(val, (datetime, date)):
                         val = val.isoformat()
-                    elif isinstance(val, (int, float)):
+                    elif isinstance(val, (int, float)) and not (
+                        is_general_journal_text or is_purchase_journal_text
+                    ):
                         numeric_totals[col] = numeric_totals.get(col, 0) + (val or 0)
                         formatted_val = f"{val:,.2f}" if isinstance(val, float) else f"{val:,}"
                         val = formatted_val
@@ -2407,12 +2438,56 @@ class SqlReport(models.Model):
 
         # === Table Rows ===
         totals = {col: 0 for col in columns}
+        ledger_text_columns = {
+            'ACCOUNT',
+            'DATE',
+            'JOURNAL REF. NO.',
+            'JOURNAL TYPE',
+            'PRIMARY',
+            'SECONDARY',
+            'PARTICULARS',
+        }
+        general_journal_text_columns = {
+            'DATE',
+            'JOURNAL BATCH ID',
+            'DESCRIPTION',
+            'ACCOUNT CODE',
+            'ACCOUNT TITLE',
+            'REF NUMBER',
+        }
+        purchase_journal_text_columns = {
+            'TRANSACTION DATE',
+            'CV NUMBER',
+            'NAME OF PAYEE/SUPPLIER',
+            'ADDRESS',
+            'TIN',
+            'REF DATE',
+            'PRIMARY',
+            'SUPPLEMENTARY',
+            'ACCOUNT TITLE',
+            'EWT ATC',
+            'EWT RATE',
+        }
         for row_idx, row in enumerate(rows, start=start_row + 1):
             is_summary_total = self._is_summary_total_row(row, columns)
             row_text_format = bold_text_format if is_summary_total else text_format
             row_number_format = bold_number_format if is_summary_total else number_format
             for col_idx, col_name in enumerate(columns):
                 val = row.get(col_name, "")
+
+                is_ledger_text = self.name == 'general_ledger' and col_name in ledger_text_columns
+                is_general_journal_text = (
+                    self.name == 'general_journal'
+                    and col_name in general_journal_text_columns
+                )
+                is_purchase_journal_text = (
+                    self.name == 'purchase_journal'
+                    and col_name in purchase_journal_text_columns
+                )
+
+                if is_ledger_text or is_general_journal_text or is_purchase_journal_text:
+                    worksheet.write(row_idx, col_idx, "" if val is None else str(val), row_text_format)
+                    continue
                 
                 # Handle numeric values
                 if isinstance(val, (int, float)):
@@ -2425,7 +2500,8 @@ class SqlReport(models.Model):
                     # Try parsing numeric strings (e.g., "1234" or "1,234.56")
                     try:
                         float_val = float(str(val).replace(",", ""))
-                        totals[col_name] += float_val
+                        if not is_ledger_text:
+                            totals[col_name] += float_val
                         if float_val == 0:
                             worksheet.write(row_idx, col_idx, "-", row_text_format)
                         else:
