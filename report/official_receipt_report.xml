@@ -3,8 +3,9 @@
   <!--
     Shared receipt layout (Collection Receipt / Official Receipt).
     Title comes from `receipt_title`, number prefix from `receipt_code` (OR / CR).
+    The prefix drives both the receipt number shown (CR-/OR-) and the Permitted Series Range.
     Layout follows the Etaxpoint OR format:
-    Header > Title > OR/CR No/BR/Date > Customer > Reference Details (2-column)
+    Header > Title > OR/CR No/BR/Date > Customer > Reference Details
     > Collection Details + Mode of Payment > Amount in Words > Payment Details
     > Account Titles > Signatures > BIR footer
   -->
@@ -17,12 +18,16 @@
         <t t-set="system_name" t-value="'Odoo 18 (Tax Based Accounting System)'"/>
         <t t-set="ack_cert_no" t-value="''"/>
         <t t-set="ack_cert_date" t-value="''"/>
-        <t t-set="series_range" t-value="'OR-000000000001 - OR-999999999999'"/>
         <t t-set="fmt" t-value="{'widget': 'float', 'precision': 2}"/>
         <!-- Account codes treated as Creditable Withholding Tax (EWT / 2307) -->
         <t t-set="ewt_codes" t-value="('1042',)"/>
         <!-- Receipt number prefix: OR when called from the Official Receipt wrapper, CR otherwise -->
         <t t-set="no_label" t-value="receipt_code or 'CR'"/>
+        <!-- Permitted series range follows the receipt type (CR-... or OR-...) -->
+        <t t-set="series_range" t-value="'%s-000000000001 - %s-999999999999' % (no_label, no_label)"/>
+        <!-- Receipt number: swap an existing CR-/OR- prefix on the payment name for the receipt type's prefix -->
+        <t t-set="doc_name" t-value="doc.name or ''"/>
+        <t t-set="receipt_no" t-value="(no_label + doc_name[2:]) if doc_name[:3] in ('CR-', 'OR-') else doc_name"/>
         <!-- Currency labels for Amount in Words (plural / singular when whole amount is 1) -->
         <t t-set="currency_word_plural" t-value="{'PHP': 'Philippine Pesos', 'USD': 'US Dollars', 'SGD': 'Singapore Dollars'}"/>
         <t t-set="currency_word_singular" t-value="{'PHP': 'Philippine Peso', 'USD': 'US Dollar', 'SGD': 'Singapore Dollar'}"/>
@@ -43,6 +48,13 @@
         <!-- Balancing figures so Collection Details always ties to the payment amount -->
         <t t-set="other_ded" t-value="round(max(net_due - doc.amount, 0.0), 2)"/>
         <t t-set="deposit" t-value="round(max(doc.amount - net_due, 0.0), 2)"/>
+
+        <!-- Per-invoice CWT for Reference Details:
+             EWT booked on the invoice itself + a share of the payment-level EWT (write-off),
+             split by each invoice's gross. The last invoice absorbs any rounding difference. -->
+        <t t-set="inv_ewt_map" t-value="{inv.id: sum(abs(l.balance) for l in inv.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0)) for inv in invoices}"/>
+        <t t-set="inv_gross_map" t-value="{inv.id: round(inv.amount_total + inv_ewt_map[inv.id], 2) for inv in invoices}"/>
+        <t t-set="inv_pay_share" t-value="{inv.id: (round(ewt_pay * inv_gross_map[inv.id] / gross, 2) if gross else 0.0) for inv in invoices}"/>
 
         <!-- Mode of payment -->
         <t t-set="pm_name" t-value="(doc.payment_method_line_id.name or '').lower()"/>
@@ -77,12 +89,18 @@
         <div class="page">
           <style>
             .or-wrap { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.35; color: #000; }
-            .or-tbl { width: 100%; border-collapse: collapse; }
-            .or-tbl td, .or-tbl th { border: 1px solid #000; padding: 3px 5px; }
-            .or-tbl th { background: #d9d9d9; font-weight: bold; text-align: center; }
-            .or-tbl tr { height: 18px; }
             .or-plain { width: 100%; border-collapse: collapse; }
             .or-plain td { border: none; padding: 2px 0; vertical-align: top; }
+            .or-tbl { width: 100%; border-collapse: collapse; }
+            /* The .or-plain .or-tbl selectors keep grid lines on tables nested inside a layout cell
+               (Collection Details / Mode of Payment); without them `.or-plain td` strips the borders. */
+            .or-tbl td, .or-tbl th,
+            .or-plain .or-tbl td, .or-plain .or-tbl th { border: 1px solid #000; padding: 3px 5px; }
+            .or-tbl th { background: #d9d9d9; font-weight: bold; text-align: center; }
+            .or-tbl tr { height: 18px; }
+            /* Boxed CR/OR No / Branch / Date line */
+            .or-head { border: 1px solid #000; }
+            .or-plain.or-head td { padding: 2px 5px; }
             .or-r { text-align: right; }
             .or-c { text-align: center; }
             .or-tot td { background: #e6e6e6; font-weight: bold; }
@@ -109,9 +127,9 @@
             </div>
 
             <!-- ===== OR/CR NO / BRANCH / DATE ===== -->
-            <table class="or-plain" style="margin-bottom: 6px;">
+            <table class="or-plain or-head" style="margin-bottom: 6px;">
               <tr>
-                <td style="width: 40%;"><strong><t t-esc="no_label"/> NO.:</strong> <span t-field="doc.name"/></td>
+                <td style="width: 40%;"><strong><t t-esc="no_label"/> NO.:</strong> <t t-esc="receipt_no"/></td>
                 <td style="width: 25%;" class="or-c"><strong t-esc="branch_code"/></td>
                 <td style="width: 35%;" class="or-r">
                   <strong>Date</strong> <span t-field="doc.date" t-options='{"format": "MMMM dd, yyyy"}'/>
@@ -147,31 +165,36 @@
             <!-- ===== REFERENCE DETAILS (one invoice per row) ===== -->
             <table class="or-tbl">
               <thead>
-                <tr><th colspan="4">REFERENCE DETAILS</th></tr>
+                <tr><th colspan="5">REFERENCE DETAILS</th></tr>
                 <tr>
-                  <th style="width: 30%;">Reference Date</th>
-                  <th style="width: 20%;">Amount</th>
-                  <th style="width: 30%;">Reference Number</th>
-                  <th style="width: 20%;">Amount</th>
+                  <th style="width: 18%;">Reference Date</th>
+                  <th style="width: 20%;">Reference Amount</th>
+                  <th style="width: 24%;">Reference Number</th>
+                  <th style="width: 16%;">CWT</th>
+                  <th style="width: 22%;">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 <t t-foreach="invoices" t-as="invoice">
                   <t t-set="reference_date" t-value="invoice.invoice_date or invoice.date"/>
-                  <t t-set="reference_amount" t-value="sum(abs(l.balance) for l in invoice.line_ids if l.account_id.code in ewt_codes or (l.tax_line_id and l.tax_line_id.amount &lt; 0))"/>
-                  <t t-set="reference_gross" t-value="invoice.amount_total + reference_amount"/>
+                  <t t-set="reference_gross" t-value="inv_gross_map[invoice.id]"/>
+                  <!-- Payment-level EWT share; last invoice takes the remainder so the column ties to ewt_total -->
+                  <t t-set="pay_share" t-value="round(ewt_pay - sum(v for k, v in inv_pay_share.items() if k != invoice.id), 2) if invoice_last else inv_pay_share[invoice.id]"/>
+                  <t t-set="reference_cwt" t-value="round(inv_ewt_map[invoice.id] + pay_share, 2)"/>
+                  <t t-set="reference_net" t-value="round(reference_gross - reference_cwt, 2)"/>
                   <tr>
                     <td><t t-if="reference_date" t-esc="reference_date.strftime('%m/%d/%Y')"/></td>
                     <td class="or-r"><t t-esc="reference_gross" t-options="fmt"/></td>
                     <td><t t-esc="invoice.name"/></td>
-                    <td class="or-r"><t t-esc="reference_gross" t-options="fmt"/></td>
+                    <td class="or-r"><t t-esc="reference_cwt" t-options="fmt"/></td>
+                    <td class="or-r"><t t-esc="reference_net" t-options="fmt"/></td>
                   </tr>
                 </t>
               </tbody>
               <tfoot>
                 <tr class="or-tot">
-                  <td colspan="3">TOTAL</td>
-                  <td class="or-r"><t t-esc="gross" t-options="fmt"/></td>
+                  <td colspan="4">TOTAL</td>
+                  <td class="or-r"><t t-esc="net_due" t-options="fmt"/></td>
                 </tr>
               </tfoot>
             </table>
@@ -193,6 +216,11 @@
                       </tr>
                       <tr>
                         <td>Less: 2307 - EWT</td>
+                        <td class="or-r"><t t-esc="ewt_total" t-options="fmt"/></td>
+                      </tr>
+                      <!-- Only shown when the payment is short of the net due for reasons other than EWT -->
+                      <tr t-if="other_ded">
+                        <td>Less: Other Deductions</td>
                         <td class="or-r"><t t-esc="other_ded" t-options="fmt"/></td>
                       </tr>
                       <tr>
